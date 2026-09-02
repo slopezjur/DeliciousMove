@@ -1,44 +1,48 @@
 import gsap from 'gsap';
-import { BoardView } from './BoardView.ts';
+import { IBoardViewAnimator } from './IBoardViewContracts.ts';
+import { IAnimationSequencer } from './IAnimationSequencer.ts';
+import { TileSprite } from './TileSprite.ts';
 import { CascadeStep, Position } from '../core/TileTypes.ts';
-import { SoundManager } from '../audio/SoundManager.ts';
+import { ISoundService } from '../audio/ISoundService.ts';
+import { soundManagerInstance } from '../audio/SoundManager.ts';
+import { EffectPresenterRegistry } from './vfx/EffectPresenterRegistry.ts';
 
-export class AnimationQueue {
-  private boardView: BoardView;
+const COMBO_PRAISE_THRESHOLD = 4;
+const COMBO_PRAISES = ['DELICIOUS!', 'TASTY!', 'SUGAR CRUSH!', 'SWEET!'];
 
-  constructor(boardView: BoardView) {
+export class AnimationQueue implements IAnimationSequencer {
+  private boardView: IBoardViewAnimator;
+  private soundService: ISoundService;
+  private effectPresenters: EffectPresenterRegistry;
+
+  constructor(
+    boardView: IBoardViewAnimator,
+    soundService: ISoundService = soundManagerInstance,
+    effectPresenters: EffectPresenterRegistry = new EffectPresenterRegistry()
+  ) {
     this.boardView = boardView;
+    this.soundService = soundService;
+    this.effectPresenters = effectPresenters;
   }
 
-  public animateSwap(posA: Position, posB: Position, revert = false): Promise<void> {
+  /**
+   * Animates two sprites swapping positions.
+   */
+  public animateSwap(
+    spriteA: TileSprite,
+    spriteB: TileSprite,
+    posA: Position,
+    posB: Position
+  ): Promise<void> {
     return new Promise((resolve) => {
-      const tileA = this.boardView.board.get(posA.row, posA.col);
-      const tileB = this.boardView.board.get(posB.row, posB.col);
-
-      const spriteA = tileA ? this.boardView.getTileSprite(tileA.id) : null;
-      const spriteB = tileB ? this.boardView.getTileSprite(tileB.id) : null;
-
-      if (!spriteA || !spriteB) {
-        resolve();
-        return;
-      }
-
       const pixelA = this.boardView.gridToLocal(posA.row, posA.col);
       const pixelB = this.boardView.gridToLocal(posB.row, posB.col);
 
-      SoundManager.playSwap();
+      this.soundService.playSwap();
 
-      const tl = gsap.timeline({
-        onComplete: () => resolve(),
-      });
-
-      tl.to(spriteA, { x: pixelB.x, y: pixelB.y, duration: 0.22, ease: 'power2.out' }, 0);
-      tl.to(spriteB, { x: pixelA.x, y: pixelA.y, duration: 0.22, ease: 'power2.out' }, 0);
-
-      if (revert) {
-        tl.to(spriteA, { x: pixelA.x, y: pixelA.y, duration: 0.18, ease: 'power2.inOut', delay: 0.05 });
-        tl.to(spriteB, { x: pixelB.x, y: pixelB.y, duration: 0.18, ease: 'power2.inOut' }, '<');
-      }
+      const tl = gsap.timeline({ onComplete: () => resolve() });
+      tl.to(spriteA, { x: pixelB.x, y: pixelB.y, duration: 0.2, ease: 'power2.out' }, 0);
+      tl.to(spriteB, { x: pixelA.x, y: pixelA.y, duration: 0.2, ease: 'power2.out' }, 0);
     });
   }
 
@@ -51,52 +55,103 @@ export class AnimationQueue {
     for (const step of steps) {
       onScoreGained(step.scoreGained);
 
-      // 1. Trigger special effects if any
-      if (step.triggeredSpecials && step.triggeredSpecials.length > 0) {
-        for (const spec of step.triggeredSpecials) {
-          const pos = this.boardView.gridToLocal(spec.sourceTile.row, spec.sourceTile.col);
-          if (spec.effectType === 'striped_h') {
-            this.boardView.vfx.createLaserBeam(pos.x, pos.y, this.boardView.boardPixelWidth, true);
-            SoundManager.playSpecialLaser();
-          } else if (spec.effectType === 'striped_v') {
-            this.boardView.vfx.createLaserBeam(pos.x, pos.y, this.boardView.boardPixelHeight, false);
-            SoundManager.playSpecialLaser();
-          } else if (spec.effectType === 'wrapped' || spec.effectType === 'combo_giant_wrapped') {
-            this.boardView.vfx.createShockwave(pos.x, pos.y, this.boardView.tileSize * 2.5);
-            SoundManager.playBombExplosion();
-          } else if (spec.effectType === 'color_bomb' || spec.effectType.includes('combo')) {
-            this.boardView.vfx.screenShake(this.boardView, 12);
-            SoundManager.playBombExplosion();
-          }
-        }
+      // 1. Delegate each special detonation to its registered presenter (OCP)
+      for (const spec of step.triggeredSpecials ?? []) {
+        this.effectPresenters.present(spec, {
+          boardView: this.boardView,
+          sound: this.soundService,
+          position: this.boardView.gridToLocal(spec.sourceTile.row, spec.sourceTile.col),
+        });
       }
 
       // 2. Play match sound & floating text
-      SoundManager.playMatch(combo);
+      this.soundService.playMatch(combo);
 
-      if (combo >= 4) {
-        const centerPos = this.boardView.gridToLocal(3, 3);
-        const praises = ['DELICIOUS!', 'TASTY!', 'SUGAR CRUSH!', 'SWEET!'];
-        const word = praises[(combo - 4) % praises.length];
-        this.boardView.vfx.createFloatingText(centerPos.x, centerPos.y, word, 0xffd700);
-        this.boardView.vfx.screenShake(this.boardView, 8);
+      if (combo >= COMBO_PRAISE_THRESHOLD) {
+        const center = this.getBoardCenter();
+        const word = COMBO_PRAISES[(combo - COMBO_PRAISE_THRESHOLD) % COMBO_PRAISES.length];
+        this.boardView.vfx.createFloatingText(center.x, center.y, word, 0xffd700);
+        this.boardView.screenShake(8);
       }
 
-      // 3. Animate destruction of matched tiles
+      // 3. Animate matched tiles and special candy evolutions
       await new Promise<void>((resolve) => {
         const tl = gsap.timeline({ onComplete: resolve });
+        const handledIds = new Set<number>();
 
+        // A. Handle special candy evolutions (companion tiles merge into target cell)
+        if (step.evolutions && step.evolutions.length > 0) {
+          for (const evo of step.evolutions) {
+            const specialSprite = this.boardView.getTileSprite(evo.specialTile.id);
+            const targetPos = this.boardView.gridToLocal(evo.specialTile.row, evo.specialTile.col);
+
+            handledIds.add(evo.specialTile.id);
+
+            // Animate companion tiles converging and merging into targetPos
+            for (const sourceId of evo.sourceTileIds) {
+              handledIds.add(sourceId);
+              const sourceSprite = this.boardView.getTileSprite(sourceId);
+              if (sourceSprite) {
+                tl.to(
+                  sourceSprite,
+                  {
+                    x: targetPos.x,
+                    y: targetPos.y,
+                    alpha: 0.1,
+                    duration: 0.22,
+                    ease: 'power2.in',
+                    onComplete: () => this.boardView.removeTileSprite(sourceId),
+                  },
+                  0
+                ).to(
+                  sourceSprite.scale,
+                  {
+                    x: 0.1,
+                    y: 0.1,
+                    duration: 0.22,
+                    ease: 'power2.in',
+                  },
+                  0
+                );
+              }
+            }
+
+            // Animate special candy evolving with elastic pop
+            if (specialSprite) {
+              specialSprite.x = targetPos.x;
+              specialSprite.y = targetPos.y;
+              specialSprite.tileData = evo.specialTile;
+
+              tl.add(() => {
+                specialSprite.updateTexture();
+                this.soundService.playSpecialLaser();
+                this.boardView.vfx.createParticleBurst(targetPos.x, targetPos.y, evo.specialTile.color);
+              }, 0.22);
+
+              tl.fromTo(
+                specialSprite.scale,
+                { x: 0.3, y: 0.3 },
+                { x: 1, y: 1, duration: 0.28, ease: 'back.out(2.2)' },
+                0.22
+              );
+            }
+          }
+        }
+
+        // B. Handle normal matched tiles not part of an evolution
         step.matchedTileIds.forEach((id) => {
+          if (handledIds.has(id)) return;
+          handledIds.add(id);
+
           const sprite = this.boardView.getTileSprite(id);
           if (sprite) {
-            // Particle burst
             this.boardView.vfx.createParticleBurst(sprite.x, sprite.y, sprite.tileData.color);
 
             tl.to(
               sprite.scale,
               {
-                x: 1.3,
-                y: 1.3,
+                x: 1.25,
+                y: 1.25,
                 duration: 0.12,
                 ease: 'power1.out',
               },
@@ -105,32 +160,17 @@ export class AnimationQueue {
               sprite,
               {
                 alpha: 0,
-                duration: 0.15,
+                duration: 0.14,
                 ease: 'power2.in',
                 onComplete: () => this.boardView.removeTileSprite(id),
               },
-              0.08
-            );
-          }
-        });
-
-        // Also update any upgraded special candies
-        step.spawnedSpecials.forEach((specialTile) => {
-          const sprite = this.boardView.getTileSprite(specialTile.id);
-          if (sprite) {
-            sprite.tileData = specialTile;
-            sprite.updateTexture();
-            tl.fromTo(
-              sprite.scale,
-              { x: 0.2, y: 0.2 },
-              { x: 1, y: 1, duration: 0.25, ease: 'back.out(2)' },
-              0.1
+              0.06
             );
           }
         });
       });
 
-      // 4. Animate drops and spawns
+      // 4. Animate drops and spawns with stacked positioning and soft transitions
       await new Promise<void>((resolve) => {
         const tl = gsap.timeline({ onComplete: resolve });
 
@@ -140,12 +180,16 @@ export class AnimationQueue {
           if (sprite) {
             const targetPos = this.boardView.gridToLocal(drop.toRow, drop.col);
             const distance = drop.toRow - drop.fromRow;
-            const duration = 0.2 + distance * 0.05;
+            const duration = 0.18 + distance * 0.04;
+
+            sprite.x = targetPos.x;
+            sprite.tileData.row = drop.toRow;
+            sprite.tileData.col = drop.col;
 
             tl.to(
               sprite,
               {
-                y: targetPos.x !== undefined ? targetPos.y : sprite.y,
+                y: targetPos.y,
                 duration,
                 ease: 'bounce.out',
               },
@@ -154,39 +198,81 @@ export class AnimationQueue {
           }
         });
 
-        // New tiles falling into place from top
+        // Group spawns by column to stack neatly above the grid
+        const spawnsByCol = new Map<number, typeof step.spawns>();
         step.spawns.forEach((spawn) => {
-          const sprite = this.boardView.addTileSprite(spawn.tile);
-          const targetPos = this.boardView.gridToLocal(spawn.tile.row, spawn.tile.col);
+          const list = spawnsByCol.get(spawn.tile.col) || [];
+          list.push(spawn);
+          spawnsByCol.set(spawn.tile.col, list);
+        });
 
-          // Position starting above top row
-          sprite.x = targetPos.x;
-          sprite.y = -(this.boardView.board.rows - spawn.tile.row) * this.boardView.tileSize;
+        spawnsByCol.forEach((colSpawns, col) => {
+          // Sort descending by row so the tile that ends lowest falls earliest
+          colSpawns.sort((a, b) => b.tile.row - a.tile.row);
+          const colCount = colSpawns.length;
 
-          const duration = 0.35 + spawn.tile.row * 0.05;
-          tl.to(
-            sprite,
-            {
-              y: targetPos.y,
-              duration,
-              ease: 'bounce.out',
-            },
-            0.05
-          );
+          colSpawns.forEach((spawn, idx) => {
+            const sprite = this.boardView.addTileSprite(spawn.tile);
+            const targetPos = this.boardView.gridToLocal(spawn.tile.row, col);
+
+            // Stack above row 0 (centered at tileSize / 2)
+            const topRowCenter = this.boardView.tileSize / 2;
+            const stackOffset = (colCount - idx) * this.boardView.tileSize;
+            sprite.x = targetPos.x;
+            sprite.y = topRowCenter - stackOffset;
+
+            // Soft smooth appearance
+            sprite.alpha = 0;
+            sprite.scale.set(0.75);
+
+            const fallDistance = targetPos.y - sprite.y;
+            const duration = 0.28 + (fallDistance / (this.boardView.tileSize * 8)) * 0.18;
+            const delay = 0.03 * (colCount - idx - 1);
+
+            tl.to(
+              sprite,
+              {
+                alpha: 1,
+                duration: 0.12,
+                ease: 'power1.out',
+              },
+              delay
+            );
+
+            tl.to(
+              sprite.scale,
+              {
+                x: 1,
+                y: 1,
+                duration: 0.18,
+                ease: 'back.out(1.5)',
+              },
+              delay
+            );
+
+            tl.to(
+              sprite,
+              {
+                y: targetPos.y,
+                duration,
+                ease: 'bounce.out',
+              },
+              delay
+            );
+          });
         });
       });
 
       combo++;
       // Brief pause between cascade steps for visual rhythm
-      await new Promise((r) => setTimeout(r, 60));
+      await new Promise((r) => setTimeout(r, 70));
     }
   }
 
   public animateShuffle(tileMappings: Map<number, Position>): Promise<void> {
     return new Promise((resolve) => {
-      SoundManager.playShuffle();
-      const centerX = this.boardView.boardPixelWidth / 2;
-      const centerY = this.boardView.boardPixelHeight / 2;
+      this.soundService.playShuffle();
+      const { x: centerX, y: centerY } = this.getBoardCenter();
 
       this.boardView.vfx.createFloatingText(centerX, centerY, 'SHUFFLE!', 0x00e5ff);
 
@@ -197,8 +283,9 @@ export class AnimationQueue {
         tl.to(
           sprite,
           {
-            x: centerX + (Math.random() - 0.5) * 80,
-            y: centerY + (Math.random() - 0.5) * 80,
+            x: centerX + (Math.random() * 60 - 30),
+            y: centerY + (Math.random() * 60 - 30),
+            scale: 0.4,
             rotation: (Math.random() - 0.5) * Math.PI,
             duration: 0.35,
             ease: 'power2.inOut',
@@ -208,26 +295,32 @@ export class AnimationQueue {
       });
 
       // Distribute to new positions
-      this.boardView.getTileSpritesMap().forEach((sprite) => {
-        const newPos = tileMappings.get(sprite.tileData.id);
-        if (newPos) {
-          sprite.tileData.row = newPos.row;
-          sprite.tileData.col = newPos.col;
-          const targetPix = this.boardView.gridToLocal(newPos.row, newPos.col);
-
+      tileMappings.forEach((pos, id) => {
+        const sprite = this.boardView.getTileSprite(id);
+        if (sprite) {
+          const pixel = this.boardView.gridToLocal(pos.row, pos.col);
           tl.to(
             sprite,
             {
-              x: targetPix.x,
-              y: targetPix.y,
+              x: pixel.x,
+              y: pixel.y,
+              scale: 1,
               rotation: 0,
-              duration: 0.4,
-              ease: 'back.out(1.2)',
+              duration: 0.45,
+              ease: 'elastic.out(1, 0.75)',
             },
             0.4
           );
         }
       });
     });
+  }
+
+  /** Local pixel centre of the board, independent of grid dimensions. */
+  private getBoardCenter(): { x: number; y: number } {
+    return {
+      x: this.boardView.boardPixelWidth / 2,
+      y: this.boardView.boardPixelHeight / 2,
+    };
   }
 }

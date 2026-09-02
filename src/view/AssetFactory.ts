@@ -1,293 +1,185 @@
-import { Texture } from 'pixi.js';
+import { GraphicsContext } from 'pixi.js';
 import { TileColor, SpecialType } from '../core/TileTypes.ts';
 
 export class AssetFactory {
-  private static cache: Map<string, Texture> = new Map();
-  private static readonly RESOLUTION = 128; // High DPI crisp texture
+  private static candyCache: Map<string, GraphicsContext> = new Map();
+  private static cellBgCache: Map<string, GraphicsContext> = new Map();
 
   /**
-   * Generates or retrieves a cached PixiJS Texture for a given candy color & special status.
+   * Generates or retrieves a cached native PixiJS GraphicsContext for a given candy color & special status.
    */
-  public static getCandyTexture(color: TileColor, special: SpecialType = SpecialType.None): Texture {
+  public static getCandyContext(color: TileColor, special: SpecialType = SpecialType.None): GraphicsContext {
     const key = `candy_${color}_${special}`;
-    if (this.cache.has(key)) {
-      return this.cache.get(key)!;
+    if (this.candyCache.has(key)) {
+      return this.candyCache.get(key)!;
     }
 
-    const canvas = document.createElement('canvas');
-    canvas.width = this.RESOLUTION;
-    canvas.height = this.RESOLUTION;
-    const ctx = canvas.getContext('2d')!;
-
-    const cx = this.RESOLUTION / 2;
-    const cy = this.RESOLUTION / 2;
-    const r = this.RESOLUTION * 0.4;
+    const ctx = new GraphicsContext();
 
     if (special === SpecialType.ColorBomb) {
-      this.drawColorBomb(ctx, cx, cy, r);
+      this.drawColorBomb(ctx);
     } else {
-      this.drawCandyBase(ctx, color, cx, cy, r);
+      this.drawCandyBase(ctx, color);
 
       // Draw special overlays
       if (special === SpecialType.StripedHorizontal) {
-        this.drawStripesH(ctx, cx, cy, r);
+        this.drawStripesH(ctx);
       } else if (special === SpecialType.StripedVertical) {
-        this.drawStripesV(ctx, cx, cy, r);
+        this.drawStripesV(ctx);
       } else if (special === SpecialType.Wrapped) {
-        this.drawWrapper(ctx, cx, cy, r);
+        this.drawWrapper(ctx);
       }
     }
 
-    const texture = Texture.from(canvas);
-    this.cache.set(key, texture);
-    return texture;
+    this.candyCache.set(key, ctx);
+    return ctx;
   }
 
   /**
-   * Grid cell background tile texture (frosted dark square)
+   * Grid cell background tile GraphicsContext (frosted dark square)
    */
-  public static getCellBgTexture(isAlt: boolean): Texture {
+  public static getCellBgContext(isAlt: boolean): GraphicsContext {
     const key = `cell_bg_${isAlt ? 'alt' : 'main'}`;
-    if (this.cache.has(key)) {
-      return this.cache.get(key)!;
+    if (this.cellBgCache.has(key)) {
+      return this.cellBgCache.get(key)!;
     }
 
-    const canvas = document.createElement('canvas');
-    canvas.width = this.RESOLUTION;
-    canvas.height = this.RESOLUTION;
-    const ctx = canvas.getContext('2d')!;
+    const ctx = new GraphicsContext();
+    ctx.roundRect(-48, -48, 96, 96, 16);
+    ctx.fill({ color: 0x000000, alpha: isAlt ? 0.32 : 0.20 });
+    ctx.stroke({ color: 0xffffff, width: 2, alpha: 0.1 });
 
-    const pad = 4;
-    const size = this.RESOLUTION - pad * 2;
-    const radius = 16;
-
-    ctx.fillStyle = isAlt ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.18)';
-    ctx.beginPath();
-    ctx.roundRect(pad, pad, size, size, radius);
-    ctx.fill();
-
-    // Subtle inner border
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    const texture = Texture.from(canvas);
-    this.cache.set(key, texture);
-    return texture;
+    this.cellBgCache.set(key, ctx);
+    return ctx;
   }
 
-  private static getColorPalette(color: TileColor): { top: string; mid: string; bottom: string; glow: string } {
+  private static drawCandyBase(ctx: GraphicsContext, color: TileColor): void {
     switch (color) {
-      case TileColor.Red:
-        return { top: '#ff5e7e', mid: '#ff1744', bottom: '#b2002f', glow: 'rgba(255, 23, 68, 0.4)' };
-      case TileColor.Blue:
-        return { top: '#40c4ff', mid: '#0091ea', bottom: '#005b9f', glow: 'rgba(0, 145, 234, 0.4)' };
-      case TileColor.Green:
-        return { top: '#69f0ae', mid: '#00c853', bottom: '#00701a', glow: 'rgba(0, 200, 83, 0.4)' };
-      case TileColor.Yellow:
-        return { top: '#ffff52', mid: '#ffd600', bottom: '#c79100', glow: 'rgba(255, 214, 0, 0.4)' };
-      case TileColor.Purple:
-        return { top: '#ea80fc', mid: '#aa00ff', bottom: '#6a0080', glow: 'rgba(170, 0, 255, 0.4)' };
-      case TileColor.Orange:
-        return { top: '#ffab40', mid: '#ff6d00', bottom: '#c43c00', glow: 'rgba(255, 109, 0, 0.4)' };
+      case TileColor.Red: {
+        // Jelly bean / Heart ruby
+        ctx.ellipse(0, 0, 42, 33);
+        ctx.fill({ color: 0xff1744 });
+        ctx.ellipse(0, 3, 38, 28);
+        ctx.stroke({ color: 0xb2002f, width: 3 });
+        // Specular highlight
+        ctx.ellipse(-12, -10, 16, 7);
+        ctx.fill({ color: 0xffffff, alpha: 0.75 });
+        break;
+      }
+
+      case TileColor.Blue: {
+        // Glossy sphere
+        ctx.circle(0, 0, 40);
+        ctx.fill({ color: 0x0091ea });
+        ctx.circle(0, 3, 36);
+        ctx.stroke({ color: 0x005b9f, width: 3 });
+        // Specular highlight
+        ctx.ellipse(-12, -12, 12, 8);
+        ctx.fill({ color: 0xffffff, alpha: 0.75 });
+        break;
+      }
+
+      case TileColor.Green: {
+        // Rounded square pillow
+        ctx.roundRect(-36, -36, 72, 72, 18);
+        ctx.fill({ color: 0x00c853 });
+        ctx.roundRect(-32, -32, 64, 64, 14);
+        ctx.stroke({ color: 0x00701a, width: 3 });
+        // Specular highlight
+        ctx.roundRect(-24, -24, 20, 12, 6);
+        ctx.fill({ color: 0xffffff, alpha: 0.75 });
+        break;
+      }
+
+      case TileColor.Yellow: {
+        // 4-pointed star / diamond
+        ctx.star(0, 0, 4, 44, 24);
+        ctx.fill({ color: 0xffd600 });
+        ctx.star(0, 2, 4, 38, 20);
+        ctx.stroke({ color: 0xc79100, width: 2.5 });
+        // Specular highlight
+        ctx.circle(-8, -10, 8);
+        ctx.fill({ color: 0xffffff, alpha: 0.8 });
+        break;
+      }
+
+      case TileColor.Purple: {
+        // Hexagon jewel
+        const points = [-38, 0, -19, -36, 19, -36, 38, 0, 19, 36, -19, 36];
+        ctx.poly(points);
+        ctx.fill({ color: 0xaa00ff });
+        const innerPoints = [-32, 0, -16, -30, 16, -30, 32, 0, 16, 30, -16, 30];
+        ctx.poly(innerPoints);
+        ctx.stroke({ color: 0x6a0080, width: 2.5 });
+        // Specular highlight
+        ctx.circle(-10, -14, 8);
+        ctx.fill({ color: 0xffffff, alpha: 0.75 });
+        break;
+      }
+
+      case TileColor.Orange: {
+        // Rounded capsule
+        ctx.roundRect(-42, -26, 84, 52, 26);
+        ctx.fill({ color: 0xff6d00 });
+        ctx.roundRect(-38, -22, 76, 44, 22);
+        ctx.stroke({ color: 0xc43c00, width: 2.5 });
+        // Specular highlight
+        ctx.ellipse(-14, -8, 18, 6);
+        ctx.fill({ color: 0xffffff, alpha: 0.75 });
+        break;
+      }
     }
   }
 
-  private static drawCandyBase(
-    ctx: CanvasRenderingContext2D,
-    color: TileColor,
-    cx: number,
-    cy: number,
-    r: number
-  ): void {
-    const palette = this.getColorPalette(color);
-
-    // Outer glow / shadow
-    ctx.save();
-    ctx.shadowColor = palette.glow;
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 4;
-
-    // Body Gradient
-    const grad = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.35, r * 0.1, cx, cy, r);
-    grad.addColorStop(0, palette.top);
-    grad.addColorStop(0.55, palette.mid);
-    grad.addColorStop(1, palette.bottom);
-
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    this.drawDistinctShape(ctx, color, cx, cy, r);
-    ctx.fill();
-    ctx.restore();
-
-    // Specular Highlight
-    ctx.save();
-    ctx.beginPath();
-    this.drawDistinctShape(ctx, color, cx, cy, r);
-    ctx.clip();
-
-    const specGrad = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, 2, cx - r * 0.3, cy - r * 0.35, r * 0.55);
-    specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
-    specGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.35)');
-    specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-
-    ctx.fillStyle = specGrad;
-    ctx.beginPath();
-    ctx.ellipse(cx - r * 0.25, cy - r * 0.35, r * 0.45, r * 0.25, -Math.PI / 6, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Bottom rim light
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy + r * 0.1, r * 0.75, Math.PI * 0.2, Math.PI * 0.8);
-    ctx.stroke();
-
-    ctx.restore();
+  private static drawStripesH(ctx: GraphicsContext): void {
+    ctx.rect(-38, -14, 76, 7);
+    ctx.fill({ color: 0xffffff, alpha: 0.95 });
+    ctx.rect(-38, 7, 76, 7);
+    ctx.fill({ color: 0xffffff, alpha: 0.95 });
   }
 
-  private static drawDistinctShape(
-    ctx: CanvasRenderingContext2D,
-    color: TileColor,
-    cx: number,
-    cy: number,
-    r: number
-  ): void {
-    switch (color) {
-      case TileColor.Red: // Jelly bean
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, r * 0.95, r * 0.75, 0, 0, Math.PI * 2);
-        break;
-      case TileColor.Blue: // Perfect Sphere
-        ctx.beginPath();
-        ctx.arc(cx, cy, r * 0.9, 0, Math.PI * 2);
-        break;
-      case TileColor.Green: // Rounded Square Pillow
-        ctx.roundRect(cx - r * 0.8, cy - r * 0.8, r * 1.6, r * 1.6, r * 0.35);
-        break;
-      case TileColor.Yellow: // Teardrop / Star Diamond
-        ctx.beginPath();
-        ctx.moveTo(cx, cy - r * 0.95);
-        ctx.lineTo(cx + r * 0.9, cy);
-        ctx.lineTo(cx, cy + r * 0.95);
-        ctx.lineTo(cx - r * 0.9, cy);
-        ctx.closePath();
-        break;
-      case TileColor.Purple: // Hexagon
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-          const angle = (Math.PI / 3) * i;
-          const px = cx + Math.cos(angle) * r * 0.9;
-          const py = cy + Math.sin(angle) * r * 0.9;
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-        break;
-      case TileColor.Orange: // Rounded Capsule
-        ctx.beginPath();
-        ctx.roundRect(cx - r * 0.9, cy - r * 0.65, r * 1.8, r * 1.3, r * 0.5);
-        break;
-    }
+  private static drawStripesV(ctx: GraphicsContext): void {
+    ctx.rect(-14, -38, 7, 76);
+    ctx.fill({ color: 0xffffff, alpha: 0.95 });
+    ctx.rect(7, -38, 7, 76);
+    ctx.fill({ color: 0xffffff, alpha: 0.95 });
   }
 
-  private static drawStripesH(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.lineWidth = 6;
-    ctx.shadowColor = '#ffffff';
-    ctx.shadowBlur = 10;
+  private static drawWrapper(ctx: GraphicsContext): void {
+    ctx.roundRect(-44, -44, 88, 88, 12);
+    ctx.stroke({ color: 0xffd700, width: 4.5, alpha: 0.95 });
 
-    const offsets = [-r * 0.45, 0, r * 0.45];
-    for (const off of offsets) {
-      ctx.beginPath();
-      ctx.moveTo(cx - r * 0.85, cy + off);
-      ctx.lineTo(cx + r * 0.85, cy + off);
-      ctx.stroke();
-    }
-    ctx.restore();
+    // Diagonal crinkles
+    ctx.poly([-44, -44, -24, -24]);
+    ctx.stroke({ color: 0xffffff, width: 3, alpha: 0.8 });
+    ctx.poly([44, -44, 24, -24]);
+    ctx.stroke({ color: 0xffffff, width: 3, alpha: 0.8 });
+    ctx.poly([-44, 44, -24, 24]);
+    ctx.stroke({ color: 0xffffff, width: 3, alpha: 0.8 });
+    ctx.poly([44, 44, 24, 24]);
+    ctx.stroke({ color: 0xffffff, width: 3, alpha: 0.8 });
   }
 
-  private static drawStripesV(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.lineWidth = 6;
-    ctx.shadowColor = '#ffffff';
-    ctx.shadowBlur = 10;
-
-    const offsets = [-r * 0.45, 0, r * 0.45];
-    for (const off of offsets) {
-      ctx.beginPath();
-      ctx.moveTo(cx + off, cy - r * 0.85);
-      ctx.lineTo(cx + off, cy + r * 0.85);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  private static drawWrapper(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
-    ctx.save();
-    // Shiny packaging frills on corners
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.lineWidth = 4;
-    ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur = 12;
-
-    // Outer golden frame
-    ctx.strokeRect(cx - r * 0.95, cy - r * 0.95, r * 1.9, r * 1.9);
-
-    // Crinkle diagonals
-    ctx.beginPath();
-    ctx.moveTo(cx - r, cy - r);
-    ctx.lineTo(cx - r * 0.5, cy - r * 0.5);
-    ctx.moveTo(cx + r, cy - r);
-    ctx.lineTo(cx + r * 0.5, cy - r * 0.5);
-    ctx.moveTo(cx - r, cy + r);
-    ctx.lineTo(cx - r * 0.5, cy + r * 0.5);
-    ctx.moveTo(cx + r, cy + r);
-    ctx.lineTo(cx + r * 0.5, cy + r * 0.5);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  private static drawColorBomb(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
-    ctx.save();
+  private static drawColorBomb(ctx: GraphicsContext): void {
     // Chocolate truffle ball
-    ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
-    ctx.shadowBlur = 15;
-
-    const chocGrad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, 4, cx, cy, r);
-    chocGrad.addColorStop(0, '#54301a');
-    chocGrad.addColorStop(0.6, '#2e1509');
-    chocGrad.addColorStop(1, '#110602');
-
-    ctx.fillStyle = chocGrad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.95, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.circle(0, 0, 42);
+    ctx.fill({ color: 0x2e1509 });
+    ctx.circle(0, 0, 42);
+    ctx.stroke({ color: 0xffd700, width: 2.5, alpha: 0.7 });
 
     // Rainbow sprinkles
-    const sprinkleColors = ['#ff1744', '#00e676', '#ffea00', '#00e5ff', '#d500f9', '#ff9100', '#ffffff'];
-    const sprinkleCount = 18;
+    const sprinkleColors = [0xff1744, 0x00e676, 0xffea00, 0x00e5ff, 0xd500f9, 0xff9100, 0xffffff];
+    const sprinkleCount = 14;
 
     for (let i = 0; i < sprinkleCount; i++) {
       const angle = (Math.PI * 2 * i) / sprinkleCount + (i % 2) * 0.3;
-      const dist = (r * 0.3) + ((i * 13) % (r * 0.5));
-      const sx = cx + Math.cos(angle) * dist;
-      const sy = cy + Math.sin(angle) * dist;
+      const dist = 14 + ((i * 9) % 22);
+      const sx = Math.cos(angle) * dist;
+      const sy = Math.sin(angle) * dist;
       const scolor = sprinkleColors[i % sprinkleColors.length];
 
-      ctx.save();
-      ctx.fillStyle = scolor;
-      ctx.shadowColor = scolor;
-      ctx.shadowBlur = 6;
-      ctx.beginPath();
-      ctx.ellipse(sx, sy, 5, 3, angle, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      ctx.circle(sx, sy, 4.5);
+      ctx.fill({ color: scolor });
     }
-
-    ctx.restore();
   }
 }

@@ -1,10 +1,10 @@
-import { Container, Sprite, Graphics } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
 import { TileData } from '../core/TileTypes.ts';
 import { AssetFactory } from './AssetFactory.ts';
 
 export class TileSprite extends Container {
   public tileData: TileData;
-  public readonly sprite: Sprite;
+  public readonly graphic: Graphics;
   private selectionBorder: Graphics;
   public tileSize: number;
 
@@ -13,12 +13,11 @@ export class TileSprite extends Container {
     this.tileData = tileData;
     this.tileSize = tileSize;
 
-    // Candy sprite
-    this.sprite = new Sprite(AssetFactory.getCandyTexture(tileData.color, tileData.special));
-    this.sprite.anchor.set(0.5);
-    this.sprite.width = tileSize * 0.88;
-    this.sprite.height = tileSize * 0.88;
-    this.addChild(this.sprite);
+    // Candy vector graphic using shared GraphicsContext
+    this.graphic = new Graphics(AssetFactory.getCandyContext(tileData.color, tileData.special));
+    const scale = (tileSize * 0.88) / 88;
+    this.graphic.scale.set(scale);
+    this.addChild(this.graphic);
 
     // Selection border / glow
     this.selectionBorder = new Graphics();
@@ -40,7 +39,7 @@ export class TileSprite extends Container {
   }
 
   public updateTexture(): void {
-    this.sprite.texture = AssetFactory.getCandyTexture(this.tileData.color, this.tileData.special);
+    this.graphic.context = AssetFactory.getCandyContext(this.tileData.color, this.tileData.special);
   }
 
   public setSelected(selected: boolean): void {
@@ -49,8 +48,8 @@ export class TileSprite extends Container {
 
   public resize(newTileSize: number): void {
     this.tileSize = newTileSize;
-    this.sprite.width = newTileSize * 0.88;
-    this.sprite.height = newTileSize * 0.88;
+    const scale = (newTileSize * 0.88) / 88;
+    this.graphic.scale.set(scale);
     this.drawSelectionBorder();
   }
 }

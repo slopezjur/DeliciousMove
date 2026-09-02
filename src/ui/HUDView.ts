@@ -1,104 +1,116 @@
-import { SoundManager } from '../audio/SoundManager.ts';
+import { IHUDView } from './IHUDView.ts';
+import { IGameModalView } from './IGameModalView.ts';
+import { GameModalView } from './GameModalView.ts';
+import { LevelConfig } from '../core/LevelProgression.ts';
+import { GameOverReason } from '../core/GameSession.ts';
+import { ISoundService } from '../audio/ISoundService.ts';
+import { soundManagerInstance } from '../audio/SoundManager.ts';
 
-export class HUDView {
-  private scoreEl: HTMLElement;
-  private movesEl: HTMLElement;
-  private targetEl: HTMLElement;
-  private progressFill: HTMLElement;
-  private soundBtn: HTMLElement;
-  private modalEl: HTMLElement;
-  private modalTitle: HTMLElement;
-  private modalScore: HTMLElement;
-  private modalBtn: HTMLElement;
+const LOW_MOVES_THRESHOLD = 5;
+
+export class HUDView implements IHUDView {
+  private scoreEl: HTMLElement | null;
+  private movesEl: HTMLElement | null;
+  private targetEl: HTMLElement | null;
+  private levelEl: HTMLElement | null;
+  private shufflesEl: HTMLElement | null;
+  private progressFill: HTMLElement | null;
+  private soundBtn: HTMLElement | null;
+
+  private soundService: ISoundService;
+  private modal: IGameModalView;
 
   private currentScore = 0;
-  private targetScore = 5000;
+  private targetScore = 4000;
   private displayedScore = 0;
   private animFrameId: number = 0;
 
-  constructor(onRestart: () => void) {
-    this.scoreEl = document.getElementById('score-value')!;
-    this.movesEl = document.getElementById('moves-value')!;
-    this.targetEl = document.getElementById('target-value')!;
-    this.progressFill = document.getElementById('progress-fill')!;
-    this.soundBtn = document.getElementById('sound-toggle-btn')!;
-    this.modalEl = document.getElementById('game-modal')!;
-    this.modalTitle = document.getElementById('modal-title')!;
-    this.modalScore = document.getElementById('modal-final-score')!;
-    this.modalBtn = document.getElementById('modal-action-btn')!;
+  constructor(
+    onModalAction: () => void,
+    soundService: ISoundService = soundManagerInstance,
+    modal: IGameModalView = new GameModalView(onModalAction, soundService)
+  ) {
+    this.soundService = soundService;
+    this.modal = modal;
 
-    this.soundBtn.addEventListener('click', () => {
-      const isMuted = SoundManager.toggleMute();
-      this.soundBtn.textContent = isMuted ? '🔇' : '🔊';
-    });
+    this.scoreEl = this.findElement('score-value');
+    this.movesEl = this.findElement('moves-value');
+    this.targetEl = this.findElement('target-value');
+    this.levelEl = this.findElement('level-value');
+    this.shufflesEl = this.findElement('shuffles-value');
+    this.progressFill = this.findElement('progress-fill');
+    this.soundBtn = this.findElement('sound-toggle-btn');
 
-    this.modalBtn.addEventListener('click', () => {
-      this.hideModal();
-      onRestart();
-    });
+    if (this.soundBtn) {
+      this.soundBtn.addEventListener('click', () => {
+        const isMuted = this.soundService.toggleMute();
+        if (this.soundBtn) this.soundBtn.textContent = isMuted ? '🔇' : '🔊';
+      });
+    }
   }
 
-  public initLevel(moves: number, target: number): void {
+  public initLevel(config: LevelConfig): void {
     this.currentScore = 0;
     this.displayedScore = 0;
-    this.targetScore = target;
-    this.scoreEl.textContent = '0';
-    this.movesEl.textContent = moves.toString();
-    this.targetEl.textContent = target.toLocaleString();
-    this.progressFill.style.width = '0%';
-    this.hideModal();
+    this.targetScore = config.targetScore;
+
+    this.setText(this.scoreEl, '0');
+    this.setText(this.levelEl, config.level.toString());
+    this.setText(this.targetEl, config.targetScore.toLocaleString());
+    if (this.progressFill) this.progressFill.style.width = '0%';
+
+    this.updateMoves(config.moves);
+    this.updateShuffles(config.shuffles);
+    this.modal.hide();
   }
 
   public updateMoves(moves: number): void {
-    this.movesEl.textContent = moves.toString();
-    if (moves <= 5) {
-      this.movesEl.classList.add('low-moves');
-    } else {
-      this.movesEl.classList.remove('low-moves');
-    }
+    this.setText(this.movesEl, moves.toString());
+    this.movesEl?.classList.toggle('low-moves', moves <= LOW_MOVES_THRESHOLD);
+  }
+
+  public updateShuffles(shuffles: number): void {
+    this.setText(this.shufflesEl, shuffles.toString());
+    this.shufflesEl?.classList.toggle('low-moves', shuffles <= 0);
   }
 
   public addScore(amount: number): void {
     this.currentScore += amount;
     this.animateScore();
     const progress = Math.min(100, (this.currentScore / this.targetScore) * 100);
-    this.progressFill.style.width = `${progress}%`;
+    if (this.progressFill) this.progressFill.style.width = `${progress}%`;
+  }
+
+  public showVictory(score: number, level: number): void {
+    this.modal.showVictory(score, level);
+  }
+
+  public showGameOver(score: number, level: number, reason: GameOverReason): void {
+    this.modal.showGameOver(score, level, reason);
   }
 
   private animateScore(): void {
+    if (typeof cancelAnimationFrame === 'undefined') return;
     cancelAnimationFrame(this.animFrameId);
     const step = () => {
       const diff = this.currentScore - this.displayedScore;
       if (diff > 0) {
         this.displayedScore += Math.ceil(diff * 0.15);
-        this.scoreEl.textContent = this.displayedScore.toLocaleString();
+        this.setText(this.scoreEl, this.displayedScore.toLocaleString());
         this.animFrameId = requestAnimationFrame(step);
       } else {
         this.displayedScore = this.currentScore;
-        this.scoreEl.textContent = this.displayedScore.toLocaleString();
+        this.setText(this.scoreEl, this.displayedScore.toLocaleString());
       }
     };
     this.animFrameId = requestAnimationFrame(step);
   }
 
-  public showVictory(score: number): void {
-    SoundManager.playVictory();
-    this.modalTitle.textContent = '🍬 SWEET VICTORY! 🍬';
-    this.modalTitle.style.color = '#00e676';
-    this.modalScore.textContent = `Final Score: ${score.toLocaleString()}`;
-    this.modalBtn.textContent = 'Play Next Level';
-    this.modalEl.classList.remove('hidden');
+  private setText(element: HTMLElement | null, value: string): void {
+    if (element) element.textContent = value;
   }
 
-  public showGameOver(score: number): void {
-    this.modalTitle.textContent = 'OUT OF MOVES';
-    this.modalTitle.style.color = '#ff1744';
-    this.modalScore.textContent = `Score Achieved: ${score.toLocaleString()}`;
-    this.modalBtn.textContent = 'Try Again';
-    this.modalEl.classList.remove('hidden');
-  }
-
-  public hideModal(): void {
-    this.modalEl.classList.add('hidden');
+  private findElement(id: string): HTMLElement | null {
+    return typeof document !== 'undefined' ? document.getElementById(id) : null;
   }
 }

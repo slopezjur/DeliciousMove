@@ -1,11 +1,12 @@
-import { Container, Sprite } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
 import { Board } from '../core/Board.ts';
 import { Position, TileData } from '../core/TileTypes.ts';
 import { TileSprite } from './TileSprite.ts';
 import { AssetFactory } from './AssetFactory.ts';
 import { VFXManager } from './VFXManager.ts';
+import { IBoardInputSurface, IBoardViewAnimator } from './IBoardViewContracts.ts';
 
-export class BoardView extends Container {
+export class BoardView extends Container implements IBoardInputSurface, IBoardViewAnimator {
   public readonly board: Board;
   private bgContainer: Container;
   private tilesContainer: Container;
@@ -17,7 +18,7 @@ export class BoardView extends Container {
   public boardPixelHeight: number = 0;
 
   private tileSprites: Map<number, TileSprite> = new Map();
-  private cellSprites: Sprite[][] = [];
+  private cellSprites: Graphics[][] = [];
 
   constructor(board: Board) {
     super();
@@ -41,11 +42,11 @@ export class BoardView extends Container {
     this.cellSprites = [];
 
     for (let r = 0; r < this.board.rows; r++) {
-      const row: Sprite[] = [];
+      const row: Graphics[] = [];
       for (let c = 0; c < this.board.cols; c++) {
         const isAlt = (r + c) % 2 === 1;
-        const cell = new Sprite(AssetFactory.getCellBgTexture(isAlt));
-        cell.anchor.set(0.5);
+        const cell = new Graphics(AssetFactory.getCellBgContext(isAlt));
+        cell.scale.set(this.tileSize / 96);
         this.bgContainer.addChild(cell);
         row.push(cell);
       }
@@ -53,20 +54,26 @@ export class BoardView extends Container {
     }
   }
 
-  public updateLayout(availableWidth: number, availableHeight: number): void {
+  /**
+   * @param offsetY Pixels reserved above the board (e.g. the HUD), so the board is
+   *                centred once inside the remaining area rather than shifted afterwards.
+   */
+  public updateLayout(availableWidth: number, availableHeight: number, offsetY: number = 0): void {
     // Determine maximum square size that fits with margin
     const margin = 20;
-    const maxW = availableWidth - margin * 2;
-    const maxH = availableHeight - margin * 2;
-    const targetSize = Math.min(maxW, maxH);
+    const safeW = Math.max(availableWidth, 320);
+    const safeH = Math.max(availableHeight, 320);
+    const maxW = safeW - margin * 2;
+    const maxH = safeH - margin * 2;
+    const targetSize = Math.max(200, Math.min(maxW, maxH));
 
-    this.tileSize = Math.floor(targetSize / Math.max(this.board.rows, this.board.cols));
+    this.tileSize = Math.max(24, Math.floor(targetSize / Math.max(this.board.rows, this.board.cols)));
     this.boardPixelWidth = this.tileSize * this.board.cols;
     this.boardPixelHeight = this.tileSize * this.board.rows;
 
-    // Center board in viewport
-    this.x = Math.floor((availableWidth - this.boardPixelWidth) / 2);
-    this.y = Math.floor((availableHeight - this.boardPixelHeight) / 2);
+    // Center board in the area below the HUD
+    this.x = Math.floor((safeW - this.boardPixelWidth) / 2);
+    this.y = offsetY + Math.floor((safeH - this.boardPixelHeight) / 2);
 
     // Update background cells
     for (let r = 0; r < this.board.rows; r++) {
@@ -75,8 +82,7 @@ export class BoardView extends Container {
         const pos = this.gridToLocal(r, c);
         cell.x = pos.x;
         cell.y = pos.y;
-        cell.width = this.tileSize;
-        cell.height = this.tileSize;
+        cell.scale.set(this.tileSize / 96);
       }
     }
 
@@ -144,5 +150,17 @@ export class BoardView extends Container {
 
   public getTileSpritesMap(): Map<number, TileSprite> {
     return this.tileSprites;
+  }
+
+  public screenShake(intensity: number = 12): void {
+    this.vfx.screenShake(this, intensity);
+  }
+
+  public setTileSelected(pos: Position, selected: boolean): void {
+    const tile = this.board.get(pos.row, pos.col);
+    if (tile) {
+      const sprite = this.tileSprites.get(tile.id);
+      sprite?.setSelected(selected);
+    }
   }
 }

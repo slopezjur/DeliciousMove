@@ -1,15 +1,23 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Board } from '../src/core/Board.ts';
+import { BoardInitializer } from '../src/core/BoardInitializer.ts';
 import { MatchDetector } from '../src/core/MatchDetector.ts';
 import { CascadeResolver } from '../src/core/CascadeResolver.ts';
 import { ShuffleEngine } from '../src/core/ShuffleEngine.ts';
+import { SeededRandomSource } from '../src/core/random/IRandomSource.ts';
 import { TileColor, SpecialType } from '../src/core/TileTypes.ts';
 
 describe('Match-3 Core Engine', () => {
   let board: Board;
+  let matchDetector: MatchDetector;
+  let cascadeResolver: CascadeResolver;
+  let shuffleEngine: ShuffleEngine;
 
   beforeEach(() => {
     board = new Board(8, 8);
+    matchDetector = new MatchDetector();
+    cascadeResolver = new CascadeResolver();
+    shuffleEngine = new ShuffleEngine(matchDetector, new SeededRandomSource(7));
   });
 
   it('detects a simple 3-in-a-row horizontal match', () => {
@@ -25,7 +33,7 @@ describe('Match-3 Core Engine', () => {
     board.get(3, 1)!.color = TileColor.Green;
     board.get(3, 2)!.color = TileColor.Green;
 
-    const matches = MatchDetector.detectMatches(board);
+    const matches = matchDetector.detectMatches(board);
     expect(matches.length).toBe(1);
     expect(matches[0].color).toBe(TileColor.Green);
     expect(matches[0].tiles.length).toBe(3);
@@ -45,7 +53,7 @@ describe('Match-3 Core Engine', () => {
     board.get(0, 3)!.color = TileColor.Yellow;
     board.get(0, 4)!.color = TileColor.Yellow;
 
-    const matches = MatchDetector.detectMatches(board);
+    const matches = matchDetector.detectMatches(board);
     const yellowMatch = matches.find((m) => m.color === TileColor.Yellow);
     expect(yellowMatch).toBeDefined();
     expect(yellowMatch!.tiles.length).toBe(4);
@@ -64,7 +72,7 @@ describe('Match-3 Core Engine', () => {
       board.get(2, c)!.color = TileColor.Purple;
     }
 
-    const matches = MatchDetector.detectMatches(board);
+    const matches = matchDetector.detectMatches(board);
     const purpleMatch = matches.find((m) => m.color === TileColor.Purple);
     expect(purpleMatch).toBeDefined();
     expect(purpleMatch!.spawnSpecial?.type).toBe(SpecialType.ColorBomb);
@@ -86,7 +94,7 @@ describe('Match-3 Core Engine', () => {
     board.get(3, 3)!.color = TileColor.Red;
     board.get(4, 3)!.color = TileColor.Red;
 
-    const matches = MatchDetector.detectMatches(board);
+    const matches = matchDetector.detectMatches(board);
     const redMatch = matches.find((m) => m.color === TileColor.Red);
     expect(redMatch).toBeDefined();
     expect(redMatch!.tiles.length).toBe(5);
@@ -108,7 +116,7 @@ describe('Match-3 Core Engine', () => {
     board.get(1, 2)!.color = TileColor.Red;
 
     // Swapping (0, 2) and (1, 2) creates a 3-match of Red at row 0
-    const result = CascadeResolver.resolveSwap(board, { row: 0, col: 2 }, { row: 1, col: 2 });
+    const result = cascadeResolver.resolveSwap(board, { row: 0, col: 2 }, { row: 1, col: 2 });
     expect(result.valid).toBe(true);
     expect(result.steps.length).toBeGreaterThanOrEqual(1);
     expect(result.steps[0].scoreGained).toBeGreaterThan(0);
@@ -122,19 +130,49 @@ describe('Match-3 Core Engine', () => {
       }
     }
 
-    const result = CascadeResolver.resolveSwap(board, { row: 0, col: 0 }, { row: 0, col: 1 });
+    const result = cascadeResolver.resolveSwap(board, { row: 0, col: 0 }, { row: 0, col: 1 });
     expect(result.valid).toBe(false);
     expect(result.steps.length).toBe(0);
   });
 
   it('detects possible moves and resolves deadlocks with shuffle', () => {
-    board.populateInitial();
-    const hasMoves = ShuffleEngine.hasPossibleMoves(board);
+    new BoardInitializer(new SeededRandomSource(42)).populate(board);
+    const hasMoves = shuffleEngine.hasPossibleMoves(board);
     expect(typeof hasMoves).toBe('boolean');
 
     // Shuffle should always ensure valid moves exist
-    ShuffleEngine.shuffleBoard(board);
-    expect(ShuffleEngine.hasPossibleMoves(board)).toBe(true);
-    expect(MatchDetector.detectMatches(board).length).toBe(0);
+    const { success } = shuffleEngine.shuffleBoard(board);
+    expect(success).toBe(true);
+    expect(shuffleEngine.hasPossibleMoves(board)).toBe(true);
+    expect(matchDetector.detectMatches(board).length).toBe(0);
+  });
+
+  it('creates SpecialEvolution when a 4-in-a-row is formed and preserves the evolved special from destruction', () => {
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        board.createTile(r, c, (r + c) % 2 === 0 ? TileColor.Purple : TileColor.Orange);
+      }
+    }
+
+    // Set up a move that forms a 4-in-a-row
+    // Target: row 3, cols 1, 2, 3, 4 are Red
+    board.get(3, 1)!.color = TileColor.Red;
+    board.get(3, 2)!.color = TileColor.Red;
+    board.get(3, 3)!.color = TileColor.Red;
+    board.get(2, 4)!.color = TileColor.Red; // swap with (3, 4)
+
+    const result = cascadeResolver.resolveSwap(board, { row: 2, col: 4 }, { row: 3, col: 4 });
+    expect(result.valid).toBe(true);
+    expect(result.steps.length).toBeGreaterThanOrEqual(1);
+
+    const firstStep = result.steps[0];
+    expect(firstStep.spawnedSpecials.length).toBe(1);
+    expect(firstStep.evolutions).toBeDefined();
+    expect(firstStep.evolutions!.length).toBe(1);
+
+    const evo = firstStep.evolutions![0];
+    expect(evo.sourceTileIds.length).toBe(3);
+    // Evolved special ID must NOT be in matchedTileIds (destroyed list)
+    expect(firstStep.matchedTileIds).not.toContain(evo.specialTile.id);
   });
 });

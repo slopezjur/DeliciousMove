@@ -1,59 +1,58 @@
 import { Board } from './Board.ts';
-import { MatchDetector } from './MatchDetector.ts';
-import { SpecialType, Position } from './TileTypes.ts';
+import { IMatchDetector, MatchDetector } from './MatchDetector.ts';
+import { SpecialType, Position, TileData } from './TileTypes.ts';
+import { IRandomSource, MathRandomSource } from './random/IRandomSource.ts';
 
 export interface PossibleMove {
   from: Position;
   to: Position;
 }
 
-export class ShuffleEngine {
+export interface ShuffleResult {
+  /** False when no solvable arrangement was found within the attempt budget. */
+  success: boolean;
+  mapping: Map<number, Position>;
+}
+
+export interface IDeadlockResolver {
+  findPossibleMoves(board: Board): PossibleMove[];
+  hasPossibleMoves(board: Board): boolean;
+  shuffleBoard(board: Board): ShuffleResult;
+}
+
+export class ShuffleEngine implements IDeadlockResolver {
+  private readonly matchDetector: IMatchDetector;
+  private readonly random: IRandomSource;
+  private readonly maxShuffleAttempts: number;
+
+  constructor(
+    matchDetector: IMatchDetector = new MatchDetector(),
+    random: IRandomSource = new MathRandomSource(),
+    maxShuffleAttempts: number = 100
+  ) {
+    this.matchDetector = matchDetector;
+    this.random = random;
+    this.maxShuffleAttempts = maxShuffleAttempts;
+  }
+
   /**
    * Scans the board for any 1-swap move that results in a match or special combination.
    */
-  public static findPossibleMoves(board: Board): PossibleMove[] {
+  public findPossibleMoves(board: Board): PossibleMove[] {
     const moves: PossibleMove[] = [];
 
-    const testSwap = (posA: Position, posB: Position): boolean => {
-      const tileA = board.get(posA.row, posA.col);
-      const tileB = board.get(posB.row, posB.col);
-      if (!tileA || !tileB) return false;
-
-      // Special combos are always valid moves
-      if (
-        tileA.special === SpecialType.ColorBomb ||
-        tileB.special === SpecialType.ColorBomb ||
-        (tileA.special !== SpecialType.None && tileB.special !== SpecialType.None)
-      ) {
-        return true;
-      }
-
-      // Check if swap produces a match
-      board.swap(posA, posB);
-      const matches = MatchDetector.detectMatches(board, [posA, posB]);
-      board.swap(posA, posB); // Revert
-
-      return matches.length > 0;
-    };
-
-    // Check all horizontal swaps
+    // Right and down neighbours cover every adjacent pair exactly once.
     for (let r = 0; r < board.rows; r++) {
-      for (let c = 0; c < board.cols - 1; c++) {
-        const from = { row: r, col: c };
-        const to = { row: r, col: c + 1 };
-        if (testSwap(from, to)) {
-          moves.push({ from, to });
-        }
-      }
-    }
-
-    // Check all vertical swaps
-    for (let r = 0; r < board.rows - 1; r++) {
       for (let c = 0; c < board.cols; c++) {
-        const from = { row: r, col: c };
-        const to = { row: r + 1, col: c };
-        if (testSwap(from, to)) {
-          moves.push({ from, to });
+        for (const to of [
+          { row: r, col: c + 1 },
+          { row: r + 1, col: c },
+        ]) {
+          if (!board.isValidPosition(to.row, to.col)) continue;
+          const from = { row: r, col: c };
+          if (this.isSwapProductive(board, from, to)) {
+            moves.push({ from, to });
+          }
         }
       }
     }
@@ -61,31 +60,24 @@ export class ShuffleEngine {
     return moves;
   }
 
-  public static hasPossibleMoves(board: Board): boolean {
+  public hasPossibleMoves(board: Board): boolean {
     return this.findPossibleMoves(board).length > 0;
   }
 
   /**
-   * Shuffles current tiles on the board until at least one valid move exists and no matches are pre-formed.
-   * Returns mapping of tile ID to new { row, col } positions.
+   * Shuffles current tiles on the board until at least one valid move exists and no matches
+   * are pre-formed. Reports failure instead of silently returning a deadlocked board.
    */
-  public static shuffleBoard(board: Board): Map<number, Position> {
-    const tiles: any[] = [];
+  public shuffleBoard(board: Board): ShuffleResult {
+    const tiles: TileData[] = [];
     board.forEachTile((t) => tiles.push(t));
 
+    let success = false;
     let attempts = 0;
-    const maxAttempts = 100;
 
-    while (attempts++ < maxAttempts) {
-      // Fisher-Yates shuffle
-      for (let i = tiles.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        const temp = tiles[i];
-        tiles[i] = tiles[j];
-        tiles[j] = temp;
-      }
+    while (attempts++ < this.maxShuffleAttempts) {
+      this.shuffleInPlace(tiles);
 
-      // Assign to grid
       board.clear();
       let index = 0;
       for (let r = 0; r < board.rows; r++) {
@@ -95,8 +87,8 @@ export class ShuffleEngine {
       }
 
       // Ensure no matches already exist AND there is at least 1 valid move
-      const currentMatches = MatchDetector.detectMatches(board);
-      if (currentMatches.length === 0 && this.hasPossibleMoves(board)) {
+      if (this.matchDetector.detectMatches(board).length === 0 && this.hasPossibleMoves(board)) {
+        success = true;
         break;
       }
     }
@@ -105,6 +97,39 @@ export class ShuffleEngine {
     board.forEachTile((t, r, c) => {
       mapping.set(t.id, { row: r, col: c });
     });
-    return mapping;
+
+    return { success, mapping };
+  }
+
+  /**
+   * A swap is productive if it pairs two specials (always a combo) or forms a colour match.
+   */
+  private isSwapProductive(board: Board, posA: Position, posB: Position): boolean {
+    const tileA = board.get(posA.row, posA.col);
+    const tileB = board.get(posB.row, posB.col);
+    if (!tileA || !tileB) return false;
+
+    if (
+      tileA.special === SpecialType.ColorBomb ||
+      tileB.special === SpecialType.ColorBomb ||
+      (tileA.special !== SpecialType.None && tileB.special !== SpecialType.None)
+    ) {
+      return true;
+    }
+
+    board.swap(posA, posB);
+    const matches = this.matchDetector.detectMatches(board, [posA, posB]);
+    board.swap(posA, posB); // Revert
+
+    return matches.length > 0;
+  }
+
+  private shuffleInPlace(tiles: TileData[]): void {
+    for (let i = tiles.length - 1; i > 0; i--) {
+      const j = this.random.nextInt(i + 1);
+      const temp = tiles[i];
+      tiles[i] = tiles[j];
+      tiles[j] = temp;
+    }
   }
 }

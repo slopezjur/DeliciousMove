@@ -28,8 +28,7 @@
         left: 0;
         width: 100%;
         height: 100%;
-        display: flex;
-        flex-direction: column;
+        overflow: hidden;
       }
 
       /* Top HUD */
@@ -48,6 +47,12 @@
         -webkit-backdrop-filter: blur(12px);
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         z-index: 10;
+      }
+
+      .hud-stats {
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
 
       .hud-card {
@@ -189,8 +194,16 @@
       }
 
       #modal-final-score {
-        font-size: 18px;
-        color: rgba(255, 255, 255, 0.85);
+        font-size: 30px;
+        font-weight: 900;
+        color: #ffeb3b;
+        text-shadow: 0 2px 8px rgba(255, 235, 59, 0.4);
+      }
+
+      #modal-detail {
+        font-size: 15px;
+        color: rgba(255, 255, 255, 0.75);
+        line-height: 1.4;
       }
 
       #modal-action-btn {
@@ -217,17 +230,33 @@
       }
 
       canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
         display: block;
         touch-action: none;
+        z-index: 1;
       }
     </style>
   </head>
   <body>
     <div id="game-container">
       <header id="top-hud">
-        <div class="hud-card">
-          <span class="hud-label">Moves</span>
-          <span id="moves-value" class="hud-value">25</span>
+        <div class="hud-stats">
+          <div class="hud-card">
+            <span class="hud-label">Level</span>
+            <span id="level-value" class="hud-value">1</span>
+          </div>
+          <div class="hud-card">
+            <span class="hud-label">Moves</span>
+            <span id="moves-value" class="hud-value">25</span>
+          </div>
+          <div class="hud-card" title="Rescue reshuffles left this level">
+            <span class="hud-label">Shuffles</span>
+            <span id="shuffles-value" class="hud-value">4</span>
+          </div>
         </div>
 
         <div class="progress-container">
@@ -246,7 +275,8 @@
       <div id="game-modal" class="hidden">
         <div class="modal-box">
           <h2 id="modal-title">SWEET VICTORY!</h2>
-          <p id="modal-final-score">Final Score: 0</p>
+          <p id="modal-detail">Level cleared.</p>
+          <p id="modal-final-score">0</p>
           <button id="modal-action-btn">Play Again</button>
         </div>
       </div>

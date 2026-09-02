@@ -1,8 +1,10 @@
+import { ISoundService } from './ISoundService.ts';
+
 /**
  * Procedural Web Audio API sound synthesizer.
  * Guarantees zero asset loading failures, instant response, and rising pitch on combos.
  */
-export class SoundManager {
+export class SoundManager implements ISoundService {
   private static ctx: AudioContext | null = null;
   private static muted: boolean = false;
 
@@ -196,4 +198,16 @@ export class SoundManager {
       osc.stop(t + 0.08);
     }
   }
+
+  // Instance methods satisfying ISoundService for DI
+  public playSwap(): void { SoundManager.playSwap(); }
+  public playMatch(combo?: number): void { SoundManager.playMatch(combo); }
+  public playSpecialLaser(): void { SoundManager.playSpecialLaser(); }
+  public playBombExplosion(): void { SoundManager.playBombExplosion(); }
+  public playVictory(): void { SoundManager.playVictory(); }
+  public playShuffle(): void { SoundManager.playShuffle(); }
+  public toggleMute(): boolean { return SoundManager.toggleMute(); }
+  public isMuted(): boolean { return SoundManager.isMuted(); }
 }
+
+export const soundManagerInstance: ISoundService = new SoundManager();

@@ -58,13 +58,19 @@ export interface SpawnData {
   tile: TileData;
 }
 
+export interface SpecialEvolution {
+  specialTile: TileData;
+  sourceTileIds: number[];
+}
+
 export interface CascadeStep {
   matchedTileIds: number[];
   spawnedSpecials: TileData[];
+  evolutions?: SpecialEvolution[];
   triggeredSpecials?: {
     sourceTile: TileData;
     affectedTileIds: number[];
-    effectType: SpecialType | 'combo_cross' | 'combo_color_bomb_striped' | 'combo_double_color_bomb';
+    effectType: SpecialType | 'combo_cross' | 'combo_color_bomb_striped' | 'combo_double_color_bomb' | 'combo_giant_cross' | 'combo_giant_wrapped';
   }[];
   drops: DropMovement[];
   spawns: SpawnData[];

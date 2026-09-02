@@ -1,4 +1,4 @@
-import { TileColor, SpecialType, Position, TileData, ALL_TILE_COLORS } from './TileTypes.ts';
+import { TileColor, SpecialType, Position, TileData } from './TileTypes.ts';
 
 export class Board {
   public readonly rows: number;
@@ -57,46 +57,6 @@ export class Board {
     };
     this.set(row, col, tile);
     return tile;
-  }
-
-  public populateInitial(seedColors?: TileColor[][]): void {
-    if (seedColors) {
-      for (let r = 0; r < this.rows; r++) {
-        for (let c = 0; c < this.cols; c++) {
-          this.createTile(r, c, seedColors[r][c]);
-        }
-      }
-      return;
-    }
-
-    // Generate without initial 3-matches
-    for (let r = 0; r < this.rows; r++) {
-      for (let c = 0; c < this.cols; c++) {
-        const excludedColors = new Set<TileColor>();
-
-        // Check horizontal 2-in-a-row to the left
-        if (c >= 2) {
-          const left1 = this.get(r, c - 1);
-          const left2 = this.get(r, c - 2);
-          if (left1 && left2 && left1.color === left2.color) {
-            excludedColors.add(left1.color);
-          }
-        }
-
-        // Check vertical 2-in-a-row above
-        if (r >= 2) {
-          const up1 = this.get(r - 1, c);
-          const up2 = this.get(r - 2, c);
-          if (up1 && up2 && up1.color === up2.color) {
-            excludedColors.add(up1.color);
-          }
-        }
-
-        const available = ALL_TILE_COLORS.filter((color) => !excludedColors.has(color));
-        const chosenColor = available[Math.floor(Math.random() * available.length)];
-        this.createTile(r, c, chosenColor);
-      }
-    }
   }
 
   public clone(): Board {
