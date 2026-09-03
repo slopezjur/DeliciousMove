@@ -5,6 +5,7 @@ export interface ISoundService {
   playBombExplosion(): void;
   playVictory(): void;
   playShuffle(): void;
+  playAirplaneFly(): void;
   toggleMute(): boolean;
   isMuted(): boolean;
 }

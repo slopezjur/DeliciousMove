@@ -4,9 +4,9 @@ A high-performance, deterministic Match-3 web game designed and built to modern 
 
 ---
 
-## 🏛 Architecture & SOLID Design Principles
+## 🏛 Architecture
 
-DeliciousMove follows strict clean architecture and SOLID principles, separating deterministic game logic from presentation:
+DeliciousMove separates deterministic core game logic from presentation:
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
@@ -28,43 +28,47 @@ DeliciousMove follows strict clean architecture and SOLID principles, separating
 └────────────────────────────────┘
 ```
 
-### SOLID Implementation Highlights
+### Core Subsystems & Responsibilities
 
-* **Single Responsibility Principle (SRP):**
-  * `Board`: pure grid state and indexing — it holds tiles, it does not generate them.
-  * `BoardInitializer`: board generation policy (no pre-existing 3-in-a-row).
-  * `MatchDetector`: scans the grid for raw colour runs and delegates interpretation to rules.
-  * `BoardGravitySystem`: simulates falling tiles and empty slot compaction.
-  * `TileSpawner`: generates new candies for empty positions.
-  * `ScoreCalculator`: computes points and combo multipliers.
-  * `GameSession`: moves, target, rescue budget and state transitions.
-  * `LevelProgression`: the difficulty curve, nothing else.
-  * `TurnCoordinator`: the lifecycle of one player move.
-  * `Game`: composition root and viewport wiring only.
-* **Open/Closed Principle (OCP):**
-  * `MatchRuleRegistry`: priority-ordered `IMatchRule` strategies. New shapes (squares, crosses) register without touching the detector.
-  * `SpecialRegistry`: `ISpecialEffectHandler` / `ISpecialComboHandler` strategies. New candy mechanics register without modifying the resolution engine.
-  * `EffectPresenterRegistry`: one `IEffectPresenter` per detonation type, so a new special needs no edits to the animation sequencer.
-* **Liskov Substitution Principle (LSP):**
-  * Every handler, rule and presenter honours its contract without type coercion — `SpecialDetonationContext` lets new handlers consume extra information without breaking existing implementations.
-* **Interface Segregation Principle (ISP):**
-  * `IBoardCoordinateMapper`: spatial coordinate translation only.
-  * `IPointerEventSource`: the pointer event surface, kept apart from coordinate mapping.
-  * `IBoardViewAnimator`: tile sprite manipulation for animation sequencing.
-  * `IAnimationSequencer`: playback only, so orchestration never sees GSAP.
-* **Dependency Inversion Principle (DIP):**
-  * High-level coordinators depend on abstractions (`ICascadeResolver`, `IDeadlockResolver`, `IMatchDetector`, `ISpecialResolver`, `ISoundService`, `ILevelProgression`) rather than concrete classes or static singletons.
-  * **`IRandomSource` is injected into every source of randomness.** No core class calls `Math.random()` directly, so a `SeededRandomSource` replays an identical game — which is what makes the headless test suite deterministic.
+* **Deterministic Core**:
+  * `Board`: Pure grid state matrix and indexing.
+  * `BoardInitializer`: Initial board layout generator ensuring no pre-existing runs or squares.
+  * `MatchDetector`: Scans the grid for raw runs and delegates pattern matching to registered rules.
+  * `BoardGravitySystem`: Simulates falling tiles and compaction into empty cells.
+  * `TileSpawner`: Procedural refill generator for empty slots.
+  * `ScoreCalculator`: Calculates move points and combo multipliers.
+  * `GameSession`: Manages moves, goals, game states, and bonus banking.
+  * `LevelProgression`: Difficulty curves and stage configurations.
+  * `ShuffleEngine`: Detects deadlocks and resolves board configurations into valid states.
+* **Orchestration & Input**:
+  * `TurnCoordinator`: Orchestrates the lifecycle of player moves, swaps, direct activations, cascades, and deadlocks.
+  * `InputController`: Handles pointer and touch drag/tap gestures, intent dispatching, and interaction locking.
+  * `Game`: Composition root, dependency wiring, and viewport resizing.
+* **Extensible Rule & Special Strategies**:
+  * `MatchRuleRegistry`: Priority-ordered `IMatchRule` strategies using `MatchEvaluationContext` (3-match, 4-line, L/T-shape, 2x2 square).
+  * `SpecialRegistry`: Strategy registry for single special detonations and dual-special combination mechanics.
+  * `EffectPresenterRegistry`: Registered `IEffectPresenter` handlers for each visual detonation effect.
+* **Presentation & Contracts**:
+  * `BoardView`: PixiJS v8 board display container implementing `IBoardView`.
+  * `AnimationQueue`: Sequenced GSAP timeline runner for swaps, drops, spawns, and detonations.
+  * `VFXManager`: Procedural particle bursts, shockwaves, lasers, and projectile flights via `IVFXManager`.
+  * `SoundManager`: Web Audio API procedural synthesis implementing `ISoundService`.
+  * `BrowserClipboardService`: Segregated clipboard I/O implementing `IClipboardService`.
+  * `GameTelemetryService`: Domain diagnostic recorder implementing `IGameTelemetryService`.
+  * **Injected RNG**: All random selections receive `IRandomSource`, ensuring complete replayability and headless test determinism.
 
 ---
 
 ## 🎮 Game Rules & Specials Matrix
 
-### Basic Matches
+### Basic Matches & Direct Activation
 * **Match-3:** Normal horizontal or vertical 3-in-a-row clears matched tiles.
+* **2x2 Square:** Spawns an **Airplane**. When detonated, clears takeoff neighbors and flies to bomb a strategic target on the board.
 * **4-in-a-Row:** Spawns a **Striped Candy** (Horizontal clears entire row; Vertical clears entire column).
 * **T or L Shape (Intersection):** Spawns a **Wrapped Candy** (Explodes a 3x3 radius).
 * **5-in-a-Row:** Spawns a **Color Bomb** (Rainbow chocolate disco ball).
+* **Direct Click/Tap Activation:** Tap any special candy directly on the board to activate it immediately without swapping (consumes 1 move).
+* **Free Dragging (No Color Match Required):** Drag and swap any special candy with any adjacent tile to detonate it at the target position.
 
 A new special always survives the pass that created it, even when a chained blast sweeps
 the cell it was born in. A special candy already sitting inside a match is never silently
@@ -73,6 +77,10 @@ overwritten: the new candy lands on a plain tile of the run and the old one deto
 ### Dual Special Combinations (Swapping two specials)
 | Combo | Visual Effect | Gameplay Result |
 | :--- | :--- | :--- |
+| **Airplane + Airplane** | Squadron Launch | Launches 3 paper airplanes simultaneously targeting strategic tiles across the board. |
+| **Airplane + Striped** | Airborne Laser Drop | Airplane flies to target and detonates a full horizontal + vertical cross laser. |
+| **Airplane + Wrapped** | Airborne Heavy Bombardment | Airplane flies to target and triggers a 3x3 explosive detonation. |
+| **Color Bomb + Airplane** | Squadron Conversion | Converts all candies of the airplane's color into airplanes and launches them. |
 | **Striped + Striped** | Electric Cross Beam | Clears both entire row AND entire column in a "+" cross. |
 | **Striped + Wrapped** | Giant 3-Row Cross | Clears 3 full rows AND 3 full columns simultaneously. |
 | **Wrapped + Wrapped** | Mega Shockwave | Giant 5x5 explosion centered on the target. |

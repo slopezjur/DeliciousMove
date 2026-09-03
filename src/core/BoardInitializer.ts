@@ -64,6 +64,15 @@ export class BoardInitializer implements IBoardInitializer {
       }
     }
 
+    if (row >= 1 && col >= 1) {
+      const up = board.get(row - 1, col);
+      const left = board.get(row, col - 1);
+      const upLeft = board.get(row - 1, col - 1);
+      if (up && left && upLeft && up.color === left.color && up.color === upLeft.color) {
+        excluded.add(up.color);
+      }
+    }
+
     return excluded;
   }
 }

@@ -199,6 +199,31 @@ export class SoundManager implements ISoundService {
     }
   }
 
+  public static playAirplaneFly(): void {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(320, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.16);
+    osc.frequency.exponentialRampToValueAtTime(440, now + 0.35);
+
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.2, now + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.35);
+  }
+
   // Instance methods satisfying ISoundService for DI
   public playSwap(): void { SoundManager.playSwap(); }
   public playMatch(combo?: number): void { SoundManager.playMatch(combo); }
@@ -206,6 +231,7 @@ export class SoundManager implements ISoundService {
   public playBombExplosion(): void { SoundManager.playBombExplosion(); }
   public playVictory(): void { SoundManager.playVictory(); }
   public playShuffle(): void { SoundManager.playShuffle(); }
+  public playAirplaneFly(): void { SoundManager.playAirplaneFly(); }
   public toggleMute(): boolean { return SoundManager.toggleMute(); }
   public isMuted(): boolean { return SoundManager.isMuted(); }
 }

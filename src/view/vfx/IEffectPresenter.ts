@@ -15,5 +15,10 @@ export interface EffectPresentationContext {
  */
 export interface IEffectPresenter {
   canPresent(effectType: ComboEffectType): boolean;
-  present(effect: SpecialTriggerEffect, context: EffectPresentationContext): void;
+  present(effect: SpecialTriggerEffect, context: EffectPresentationContext): Promise<void> | void;
+}
+
+export interface IEffectPresenterRegistry {
+  register(presenter: IEffectPresenter): void;
+  present(effect: SpecialTriggerEffect, context: EffectPresentationContext): Promise<void>;
 }

@@ -28,6 +28,8 @@ export class AssetFactory {
         this.drawStripesV(ctx);
       } else if (special === SpecialType.Wrapped) {
         this.drawWrapper(ctx);
+      } else if (special === SpecialType.Airplane) {
+        this.drawAirplane(ctx);
       }
     }
 
@@ -181,5 +183,26 @@ export class AssetFactory {
       ctx.circle(sx, sy, 4.5);
       ctx.fill({ color: scolor });
     }
+  }
+
+  private static drawAirplane(ctx: GraphicsContext): void {
+    // Stylized origami paper airplane badge
+    // Left wing
+    ctx.poly([0, -22, -26, 18, 0, 10]);
+    ctx.fill({ color: 0xffffff, alpha: 0.95 });
+    ctx.stroke({ color: 0x00e5ff, width: 2, alpha: 0.9 });
+
+    // Right wing
+    ctx.poly([0, -22, 26, 18, 0, 10]);
+    ctx.fill({ color: 0xe0f7fa, alpha: 0.95 });
+    ctx.stroke({ color: 0x00e5ff, width: 2, alpha: 0.9 });
+
+    // Center fold seam
+    ctx.poly([0, -22, 0, 10, -6, 20]);
+    ctx.fill({ color: 0x80deea, alpha: 0.9 });
+
+    // Cockpit gleam dot
+    ctx.circle(0, -6, 3.5);
+    ctx.fill({ color: 0xffea00 });
   }
 }

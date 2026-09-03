@@ -3,12 +3,19 @@ import { IBoardInputSurface } from '../view/IBoardViewContracts.ts';
 import { Position } from '../core/TileTypes.ts';
 
 export type SwapCallback = (from: Position, to: Position) => Promise<boolean>;
+export type ActivateCallback = (pos: Position) => Promise<boolean>;
 
-export class InputController {
+export interface IInputController {
+  setLocked(locked: boolean): void;
+  isLocked(): boolean;
+}
+
+export class InputController implements IInputController {
   private boardView: IBoardInputSurface;
   private onSwap: SwapCallback;
+  private onActivate?: ActivateCallback;
 
-  private isLocked: boolean = false;
+  private locked: boolean = false;
   private isPointerDown: boolean = false;
   private startPointerPos: { x: number; y: number } = { x: 0, y: 0 };
   private startGridPos: Position | null = null;
@@ -16,15 +23,20 @@ export class InputController {
 
   private readonly DRAG_THRESHOLD = 22;
 
-  constructor(boardView: IBoardInputSurface, onSwap: SwapCallback) {
+  constructor(boardView: IBoardInputSurface, onSwap: SwapCallback, onActivate?: ActivateCallback) {
     this.boardView = boardView;
     this.onSwap = onSwap;
+    this.onActivate = onActivate;
 
     this.setupListeners();
   }
 
+  public isLocked(): boolean {
+    return this.locked;
+  }
+
   public setLocked(locked: boolean): void {
-    this.isLocked = locked;
+    this.locked = locked;
     if (locked) {
       this.clearSelection();
       this.resetDrag();
@@ -33,15 +45,14 @@ export class InputController {
 
   private setupListeners(): void {
     this.boardView.eventMode = 'static';
-
-    this.boardView.on('pointerdown', this.handlePointerDown, this);
-    this.boardView.on('globalpointermove', this.handlePointerMove, this);
-    this.boardView.on('pointerup', this.handlePointerUp, this);
-    this.boardView.on('pointerupoutside', this.handlePointerUp, this);
+    this.boardView.on('pointerdown', this.handlePointerDown.bind(this));
+    this.boardView.on('globalpointermove', this.handlePointerMove.bind(this));
+    this.boardView.on('pointerup', this.handlePointerUp.bind(this));
+    this.boardView.on('pointerupoutside', this.handlePointerUp.bind(this));
   }
 
   private handlePointerDown(e: FederatedPointerEvent): void {
-    if (this.isLocked) return;
+    if (this.locked) return;
 
     const local = this.boardView.toLocal(e.global);
     const gridPos = this.boardView.localToGrid(local.x, local.y);
@@ -53,7 +64,7 @@ export class InputController {
   }
 
   private handlePointerMove(e: FederatedPointerEvent): void {
-    if (this.isLocked || !this.isPointerDown || !this.startGridPos) return;
+    if (this.locked || !this.isPointerDown || !this.startGridPos) return;
 
     const local = this.boardView.toLocal(e.global);
     const dx = local.x - this.startPointerPos.x;
@@ -61,25 +72,30 @@ export class InputController {
 
     if (Math.hypot(dx, dy) < this.DRAG_THRESHOLD) return;
 
-    // Dominant axis decides the swipe direction.
-    const targetPos: Position =
-      Math.abs(dx) > Math.abs(dy)
-        ? { row: this.startGridPos.row, col: this.startGridPos.col + (dx > 0 ? 1 : -1) }
-        : { row: this.startGridPos.row + (dy > 0 ? 1 : -1), col: this.startGridPos.col };
+    let targetPos: Position;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      targetPos = {
+        row: this.startGridPos.row,
+        col: this.startGridPos.col + (dx > 0 ? 1 : -1),
+      };
+    } else {
+      targetPos = {
+        row: this.startGridPos.row + (dy > 0 ? 1 : -1),
+        col: this.startGridPos.col,
+      };
+    }
 
     const fromPos = this.startGridPos;
     this.clearSelection();
     this.resetDrag();
 
-    // Swiping off the board edge simply cancels the gesture; it must not fall through
-    // to the tap handler on release.
-    if (this.boardView.board.isValidPosition(targetPos.row, targetPos.col)) {
+    if (this.boardView.isValidPosition(targetPos)) {
       this.triggerSwap(fromPos, targetPos);
     }
   }
 
   private handlePointerUp(e: FederatedPointerEvent): void {
-    if (this.isLocked || !this.isPointerDown || !this.startGridPos) {
+    if (this.locked || !this.isPointerDown || !this.startGridPos) {
       this.resetDrag();
       return;
     }
@@ -95,6 +111,11 @@ export class InputController {
 
     // Tap handling
     if (!this.selectedGridPos) {
+      // If tapping a special candy directly, activate it immediately!
+      if (this.boardView.isSpecialTile(tappedPos) && this.onActivate) {
+        this.triggerActivate(tappedPos);
+        return;
+      }
       this.selectPosition(tappedPos);
       return;
     }
@@ -103,12 +124,21 @@ export class InputController {
     this.clearSelection();
 
     if (previous.row === tappedPos.row && previous.col === tappedPos.col) {
-      return; // Tapping the selected tile deselects it.
+      // If tapping the already selected special candy, activate it!
+      if (this.boardView.isSpecialTile(tappedPos) && this.onActivate) {
+        this.triggerActivate(tappedPos);
+        return;
+      }
+      return; // Tapping normal selected tile deselects it.
     }
 
-    if (this.boardView.board.isAdjacent(previous, tappedPos)) {
+    if (this.boardView.isAdjacent(previous, tappedPos)) {
       this.triggerSwap(previous, tappedPos);
     } else {
+      if (this.boardView.isSpecialTile(tappedPos) && this.onActivate) {
+        this.triggerActivate(tappedPos);
+        return;
+      }
       this.selectPosition(tappedPos);
     }
   }
@@ -130,12 +160,24 @@ export class InputController {
     this.startGridPos = null;
   }
 
-  /**
-   * Locks input for the duration of the move. Unlocking is the caller's decision, since
-   * the turn may have ended the game, in which case the board must stay locked.
-   */
   private async triggerSwap(from: Position, to: Position): Promise<void> {
     this.setLocked(true);
-    await this.onSwap(from, to);
+    try {
+      await this.onSwap(from, to);
+    } catch (err) {
+      console.error('[DeliciousMove] Swap execution error:', err);
+      this.setLocked(false);
+    }
+  }
+
+  private async triggerActivate(pos: Position): Promise<void> {
+    if (!this.onActivate) return;
+    this.setLocked(true);
+    try {
+      await this.onActivate(pos);
+    } catch (err) {
+      console.error('[DeliciousMove] Activation execution error:', err);
+      this.setLocked(false);
+    }
   }
 }

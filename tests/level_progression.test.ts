@@ -3,48 +3,68 @@ import {
   InfiniteLevelProgression,
   ILevelProgression,
   LevelConfig,
+  LevelDifficulty,
 } from '../src/core/LevelProgression.ts';
 import { GameSession, GameState, GameOverReason } from '../src/core/GameSession.ts';
 
 class FixedProgression implements ILevelProgression {
-  constructor(private readonly template: Omit<LevelConfig, 'level'>) {}
+  constructor(private readonly template: Partial<LevelConfig>) {}
   public getConfig(level: number): LevelConfig {
-    return { level, ...this.template };
+    return {
+      level,
+      difficulty: LevelDifficulty.Easy,
+      moves: 5,
+      targetScore: 1000,
+      shuffles: 2,
+      ...this.template,
+    };
   }
 }
 
-describe('Infinite level progression', () => {
+describe('Alternating infinite level progression', () => {
   const progression = new InfiniteLevelProgression();
 
-  it('raises the target score on every level, without bound', () => {
-    let previous = 0;
-    for (let level = 1; level <= 30; level++) {
-      const config = progression.getConfig(level);
-      expect(config.targetScore).toBeGreaterThan(previous);
-      previous = config.targetScore;
-    }
-    expect(progression.getConfig(1).targetScore).toBe(4000);
-    expect(progression.getConfig(20).targetScore).toBeGreaterThan(
-      progression.getConfig(10).targetScore
-    );
+  it('alternates difficulties in a repeating 4-tier cycle (Easy -> Medium -> Hard -> Very Hard)', () => {
+    expect(progression.getConfig(1).difficulty).toBe(LevelDifficulty.Easy);
+    expect(progression.getConfig(2).difficulty).toBe(LevelDifficulty.Medium);
+    expect(progression.getConfig(3).difficulty).toBe(LevelDifficulty.Hard);
+    expect(progression.getConfig(4).difficulty).toBe(LevelDifficulty.VeryHard);
+
+    expect(progression.getConfig(5).difficulty).toBe(LevelDifficulty.Easy);
+    expect(progression.getConfig(6).difficulty).toBe(LevelDifficulty.Medium);
+    expect(progression.getConfig(7).difficulty).toBe(LevelDifficulty.Hard);
+    expect(progression.getConfig(8).difficulty).toBe(LevelDifficulty.VeryHard);
   });
 
-  it('tightens the move budget monotonically down to a playable floor', () => {
-    const moves = Array.from({ length: 40 }, (_, i) => progression.getConfig(i + 1).moves);
-    expect(moves[0]).toBe(25);
-    for (let i = 1; i < moves.length; i++) {
-      expect(moves[i]).toBeLessThanOrEqual(moves[i - 1]);
-    }
-    expect(Math.min(...moves)).toBe(16);
+  it('assigns base moves and shuffles according to difficulty tier', () => {
+    const easy = progression.getConfig(1);
+    const medium = progression.getConfig(2);
+    const hard = progression.getConfig(3);
+    const veryHard = progression.getConfig(4);
+
+    expect(easy.moves).toBe(26);
+    expect(easy.shuffles).toBe(4);
+
+    expect(medium.moves).toBe(22);
+    expect(medium.shuffles).toBe(3);
+
+    expect(hard.moves).toBe(18);
+    expect(hard.shuffles).toBe(2);
+
+    expect(veryHard.moves).toBe(15);
+    expect(veryHard.shuffles).toBe(1);
   });
 
-  it('always leaves at least one rescue shuffle, however deep the run gets', () => {
-    expect(progression.getConfig(1).shuffles).toBe(4);
-    expect(progression.getConfig(4).shuffles).toBe(3);
-    expect(progression.getConfig(7).shuffles).toBe(2);
-    for (let level = 10; level <= 200; level++) {
-      expect(progression.getConfig(level).shuffles).toBe(1);
-    }
+  it('steps target score down on Easy levels compared to preceding Very Hard levels to provide move banking relief', () => {
+    const level4 = progression.getConfig(4); // Very Hard
+    const level5 = progression.getConfig(5); // Easy
+    expect(level5.targetScore).toBeLessThan(level4.targetScore);
+    expect(level5.moves).toBeGreaterThan(level4.moves);
+  });
+
+  it('scales baseline difficulty across 4-level cycles', () => {
+    expect(progression.getConfig(5).targetScore).toBeGreaterThan(progression.getConfig(1).targetScore);
+    expect(progression.getConfig(9).targetScore).toBeGreaterThan(progression.getConfig(5).targetScore);
   });
 
   it('clamps non-positive level numbers to level 1', () => {
@@ -53,11 +73,11 @@ describe('Infinite level progression', () => {
   });
 });
 
-describe('GameSession level ladder', () => {
+describe('GameSession level ladder & move accumulation', () => {
   const makeSession = (moves = 5, targetScore = 1000, shuffles = 2) =>
     new GameSession(new FixedProgression({ moves, targetScore, shuffles }));
 
-  it('advances to the next level after a victory and rebuilds the budgets', () => {
+  it('advances to the next level after a victory and accumulates unused moves', () => {
     const session = makeSession();
     const onLevelStarted = vi.fn();
     session.addListener({ onLevelStarted });
@@ -70,32 +90,46 @@ describe('GameSession level ladder', () => {
     session.advanceLevel();
     expect(session.getLevel()).toBe(2);
     expect(session.getScore()).toBe(0);
-    expect(session.getMovesLeft()).toBe(5);
+    // 5 base moves + 4 leftover moves = 9
+    expect(session.getMovesLeft()).toBe(9);
+    expect(session.getAccumulatedMoves()).toBe(4);
     expect(session.getShufflesLeft()).toBe(2);
     expect(session.canMakeMove()).toBe(true);
     expect(onLevelStarted).toHaveBeenCalledTimes(2);
   });
 
-  it('restarts the run back at level 1 after a loss', () => {
-    const session = makeSession(1);
-    session.startLevel(9);
-    session.onMoveInitiated();
-    expect(session.onTurnCompleted()).toBe(GameState.GameOver);
+  it('resets accumulated moves back to 0 when restarting after game over', () => {
+    const session = makeSession(5, 1000, 2);
+    session.startLevel(1);
+    session.addPoints(1500); // 5 moves remaining
+    expect(session.onTurnCompleted()).toBe(GameState.Victory);
+
+    session.advanceLevel();
+    expect(session.getMovesLeft()).toBe(10); // 5 base + 5 carried
 
     session.restart();
     expect(session.getLevel()).toBe(1);
+    expect(session.getMovesLeft()).toBe(5);
+    expect(session.getAccumulatedMoves()).toBe(0);
     expect(session.getState()).toBe(GameState.Ready);
   });
 
-  it('publishes an infinite ladder with a real progression', () => {
+  it('publishes an infinite ladder with alternating progression', () => {
     const session = new GameSession(new InfiniteLevelProgression());
     session.startLevel(1);
-    const firstTarget = session.getTargetScore();
+    expect(session.getLevelConfig().difficulty).toBe(LevelDifficulty.Easy);
 
-    for (let i = 0; i < 5; i++) session.advanceLevel();
+    session.advanceLevel();
+    expect(session.getLevelConfig().difficulty).toBe(LevelDifficulty.Medium);
 
-    expect(session.getLevel()).toBe(6);
-    expect(session.getTargetScore()).toBeGreaterThan(firstTarget);
+    session.advanceLevel();
+    expect(session.getLevelConfig().difficulty).toBe(LevelDifficulty.Hard);
+
+    session.advanceLevel();
+    expect(session.getLevelConfig().difficulty).toBe(LevelDifficulty.VeryHard);
+
+    session.advanceLevel();
+    expect(session.getLevelConfig().difficulty).toBe(LevelDifficulty.Easy);
   });
 });
 

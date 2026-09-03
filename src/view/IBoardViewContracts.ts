@@ -1,27 +1,32 @@
+import { FederatedPointerEvent } from 'pixi.js';
 import { Board } from '../core/Board.ts';
 import { Position, TileData } from '../core/TileTypes.ts';
 import { TileSprite } from './TileSprite.ts';
-import { VFXManager } from './VFXManager.ts';
+import { IVFXManager } from './VFXManager.ts';
+
+export type PointerEventHandler = (event: FederatedPointerEvent) => void;
 
 /**
  * The pointer event surface of the display object, kept separate so a coordinate mapper
  * is not forced to expose renderer internals (ISP).
  */
 export interface IPointerEventSource {
-  eventMode?: any;
-  on(event: string, fn: (...args: any[]) => void, context?: any): any;
+  eventMode?: 'none' | 'passive' | 'auto' | 'static' | 'dynamic';
+  on(event: string, fn: PointerEventHandler, context?: unknown): unknown;
   toLocal(point: { x: number; y: number }): { x: number; y: number };
 }
 
 /**
  * Coordinate mapping and selection contract required by input controllers (ISP).
- * Hides all low-level Sprite display objects from input handlers.
+ * Encapsulates spatial querying so input handlers never inspect internal board models directly (LoD).
  */
 export interface IBoardCoordinateMapper {
-  readonly board: Board;
   gridToLocal(row: number, col: number): { x: number; y: number };
   localToGrid(localX: number, localY: number): Position | null;
   setTileSelected(pos: Position, selected: boolean): void;
+  isSpecialTile(pos: Position): boolean;
+  isValidPosition(pos: Position): boolean;
+  isAdjacent(posA: Position, posB: Position): boolean;
 }
 
 /** What InputController actually needs: coordinates plus a pointer event stream. */
@@ -35,11 +40,21 @@ export interface IBoardViewAnimator {
   readonly tileSize: number;
   readonly boardPixelWidth: number;
   readonly boardPixelHeight: number;
-  readonly vfx: VFXManager;
+  readonly vfx: IVFXManager;
   gridToLocal(row: number, col: number): { x: number; y: number };
   getTileSprite(id: number): TileSprite | undefined;
   addTileSprite(tile: TileData): TileSprite;
   removeTileSprite(id: number): void;
   getTileSpritesMap(): Map<number, TileSprite>;
   screenShake(intensity?: number): void;
+  syncSpritesWithBoard(): void;
+}
+
+/**
+ * Full board presentation abstraction (DIP).
+ * Allows composition roots and managers to depend on view contracts rather than Pixi concrete classes.
+ */
+export interface IBoardView extends IBoardInputSurface, IBoardViewAnimator {
+  initFromBoard(): void;
+  updateLayout(availableWidth: number, availableHeight: number, offsetY?: number): void;
 }

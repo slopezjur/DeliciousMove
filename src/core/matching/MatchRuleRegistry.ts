@@ -1,6 +1,6 @@
-import { RawRun } from '../MatchDetector.ts';
 import { MatchGroup, Position, SpecialType, TileData } from '../TileTypes.ts';
-import { IMatchRule } from './IMatchRule.ts';
+import { IMatchRule, MatchEvaluationContext } from './IMatchRule.ts';
+import { SquareAirplaneRule } from './SquareAirplaneRule.ts';
 
 export function chooseSpawnPos(
   tiles: TileData[],
@@ -18,18 +18,14 @@ export function chooseSpawnPos(
 export class ColorBombRule implements IMatchRule {
   public readonly priority = 100;
 
-  public evaluate(
-    hRuns: RawRun[],
-    vRuns: RawRun[],
-    consumedH: Set<RawRun>,
-    consumedV: Set<RawRun>,
-    interactionPositions: Position[]
-  ): MatchGroup[] {
+  public evaluate(ctx: MatchEvaluationContext): MatchGroup[] {
+    const { hRuns, vRuns, consumedH, consumedV, interactionPositions, consumedTileIds } = ctx;
     const matches: MatchGroup[] = [];
 
     for (const h of hRuns) {
       if (!consumedH.has(h) && h.tiles.length >= 5) {
         consumedH.add(h);
+        h.tiles.forEach((t) => consumedTileIds.add(t.id));
         const centerTile = h.tiles[Math.floor(h.tiles.length / 2)];
         const spawnPos = chooseSpawnPos(h.tiles, interactionPositions, { row: centerTile.row, col: centerTile.col });
         matches.push({
@@ -47,6 +43,7 @@ export class ColorBombRule implements IMatchRule {
     for (const v of vRuns) {
       if (!consumedV.has(v) && v.tiles.length >= 5) {
         consumedV.add(v);
+        v.tiles.forEach((t) => consumedTileIds.add(t.id));
         const centerTile = v.tiles[Math.floor(v.tiles.length / 2)];
         const spawnPos = chooseSpawnPos(v.tiles, interactionPositions, { row: centerTile.row, col: centerTile.col });
         matches.push({
@@ -68,13 +65,8 @@ export class ColorBombRule implements IMatchRule {
 export class IntersectionWrappedRule implements IMatchRule {
   public readonly priority = 200;
 
-  public evaluate(
-    hRuns: RawRun[],
-    vRuns: RawRun[],
-    consumedH: Set<RawRun>,
-    consumedV: Set<RawRun>,
-    interactionPositions: Position[]
-  ): MatchGroup[] {
+  public evaluate(ctx: MatchEvaluationContext): MatchGroup[] {
+    const { hRuns, vRuns, consumedH, consumedV, interactionPositions, consumedTileIds } = ctx;
     const matches: MatchGroup[] = [];
 
     for (const h of hRuns) {
@@ -89,8 +81,14 @@ export class IntersectionWrappedRule implements IMatchRule {
             consumedV.add(v);
 
             const combinedTileMap = new Map<number, TileData>();
-            h.tiles.forEach((t) => combinedTileMap.set(t.id, t));
-            v.tiles.forEach((t) => combinedTileMap.set(t.id, t));
+            h.tiles.forEach((t) => {
+              combinedTileMap.set(t.id, t);
+              consumedTileIds.add(t.id);
+            });
+            v.tiles.forEach((t) => {
+              combinedTileMap.set(t.id, t);
+              consumedTileIds.add(t.id);
+            });
             const uniqueTiles = Array.from(combinedTileMap.values());
 
             const spawnPos = chooseSpawnPos(uniqueTiles, interactionPositions, {
@@ -120,18 +118,14 @@ export class IntersectionWrappedRule implements IMatchRule {
 export class StripedRule implements IMatchRule {
   public readonly priority = 300;
 
-  public evaluate(
-    hRuns: RawRun[],
-    vRuns: RawRun[],
-    consumedH: Set<RawRun>,
-    consumedV: Set<RawRun>,
-    interactionPositions: Position[]
-  ): MatchGroup[] {
+  public evaluate(ctx: MatchEvaluationContext): MatchGroup[] {
+    const { hRuns, vRuns, consumedH, consumedV, interactionPositions, consumedTileIds } = ctx;
     const matches: MatchGroup[] = [];
 
     for (const h of hRuns) {
-      if (!consumedH.has(h) && h.tiles.length === 4) {
+      if (!consumedH.has(h) && h.tiles.length === 4 && !h.tiles.some((t) => consumedTileIds.has(t.id))) {
         consumedH.add(h);
+        h.tiles.forEach((t) => consumedTileIds.add(t.id));
         const centerTile = h.tiles[1];
         const spawnPos = chooseSpawnPos(h.tiles, interactionPositions, { row: centerTile.row, col: centerTile.col });
         matches.push({
@@ -147,8 +141,9 @@ export class StripedRule implements IMatchRule {
     }
 
     for (const v of vRuns) {
-      if (!consumedV.has(v) && v.tiles.length === 4) {
+      if (!consumedV.has(v) && v.tiles.length === 4 && !v.tiles.some((t) => consumedTileIds.has(t.id))) {
         consumedV.add(v);
+        v.tiles.forEach((t) => consumedTileIds.add(t.id));
         const centerTile = v.tiles[1];
         const spawnPos = chooseSpawnPos(v.tiles, interactionPositions, { row: centerTile.row, col: centerTile.col });
         matches.push({
@@ -170,31 +165,35 @@ export class StripedRule implements IMatchRule {
 export class NormalMatchRule implements IMatchRule {
   public readonly priority = 400;
 
-  public evaluate(
-    hRuns: RawRun[],
-    vRuns: RawRun[],
-    consumedH: Set<RawRun>,
-    consumedV: Set<RawRun>
-  ): MatchGroup[] {
+  public evaluate(ctx: MatchEvaluationContext): MatchGroup[] {
+    const { hRuns, vRuns, consumedH, consumedV, consumedTileIds } = ctx;
     const matches: MatchGroup[] = [];
 
     for (const h of hRuns) {
-      if (!consumedH.has(h) && h.tiles.length >= 3) {
-        consumedH.add(h);
-        matches.push({
-          tiles: h.tiles,
-          color: h.color,
-        });
+      if (!consumedH.has(h)) {
+        const available = h.tiles.filter((t) => !consumedTileIds.has(t.id));
+        if (available.length >= 3) {
+          consumedH.add(h);
+          available.forEach((t) => consumedTileIds.add(t.id));
+          matches.push({
+            tiles: available,
+            color: h.color,
+          });
+        }
       }
     }
 
     for (const v of vRuns) {
-      if (!consumedV.has(v) && v.tiles.length >= 3) {
-        consumedV.add(v);
-        matches.push({
-          tiles: v.tiles,
-          color: v.color,
-        });
+      if (!consumedV.has(v)) {
+        const available = v.tiles.filter((t) => !consumedTileIds.has(t.id));
+        if (available.length >= 3) {
+          consumedV.add(v);
+          available.forEach((t) => consumedTileIds.add(t.id));
+          matches.push({
+            tiles: available,
+            color: v.color,
+          });
+        }
       }
     }
 
@@ -221,6 +220,7 @@ export class MatchRuleRegistry {
   private registerDefaultRules(): void {
     this.registerRule(new ColorBombRule());
     this.registerRule(new IntersectionWrappedRule());
+    this.registerRule(new SquareAirplaneRule());
     this.registerRule(new StripedRule());
     this.registerRule(new NormalMatchRule());
   }

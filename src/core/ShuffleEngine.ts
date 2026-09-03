@@ -61,6 +61,13 @@ export class ShuffleEngine implements IDeadlockResolver {
   }
 
   public hasPossibleMoves(board: Board): boolean {
+    // Any special candy on the board can be directly clicked or swapped without matching colors
+    let hasSpecial = false;
+    board.forEachTile((t) => {
+      if (t.special !== SpecialType.None) hasSpecial = true;
+    });
+    if (hasSpecial) return true;
+
     return this.findPossibleMoves(board).length > 0;
   }
 
@@ -102,18 +109,14 @@ export class ShuffleEngine implements IDeadlockResolver {
   }
 
   /**
-   * A swap is productive if it pairs two specials (always a combo) or forms a colour match.
+   * A swap is productive if it involves at least one special candy (free drag) or forms a colour match.
    */
   private isSwapProductive(board: Board, posA: Position, posB: Position): boolean {
     const tileA = board.get(posA.row, posA.col);
     const tileB = board.get(posB.row, posB.col);
     if (!tileA || !tileB) return false;
 
-    if (
-      tileA.special === SpecialType.ColorBomb ||
-      tileB.special === SpecialType.ColorBomb ||
-      (tileA.special !== SpecialType.None && tileB.special !== SpecialType.None)
-    ) {
+    if (tileA.special !== SpecialType.None || tileB.special !== SpecialType.None) {
       return true;
     }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ScoreCalculator } from '../src/core/ScoreCalculator.ts';
 import { GameSession, GameState, GameOverReason } from '../src/core/GameSession.ts';
-import { ILevelProgression, LevelConfig } from '../src/core/LevelProgression.ts';
+import { ILevelProgression, LevelConfig, LevelDifficulty } from '../src/core/LevelProgression.ts';
 import { BoardGravitySystem } from '../src/core/BoardGravitySystem.ts';
 import { TileSpawner } from '../src/core/TileSpawner.ts';
 import { Board } from '../src/core/Board.ts';
@@ -15,9 +15,16 @@ import { ISpecialEffectHandler, SpecialTriggerEffect } from '../src/core/special
 
 /** Fixed single-level progression so session tests never depend on the scaling curve. */
 class FixedProgression implements ILevelProgression {
-  constructor(private readonly template: Omit<LevelConfig, 'level'>) {}
+  constructor(private readonly template: Partial<LevelConfig>) {}
   public getConfig(level: number): LevelConfig {
-    return { level, ...this.template };
+    return {
+      level,
+      difficulty: LevelDifficulty.Easy,
+      moves: 20,
+      targetScore: 1000,
+      shuffles: 2,
+      ...this.template,
+    };
   }
 }
 
@@ -116,6 +123,20 @@ describe('SOLID Refactoring Unit Tests', () => {
 
       const bombStripedHandler = registry.findComboHandler(bomb1, striped);
       expect(bombStripedHandler).toBeInstanceOf(ColorBombStripedComboHandler);
+    });
+
+    it('matches GiantCross combo symmetrically in both swap directions', () => {
+      const registry = new SpecialRegistry();
+      const striped: TileData = { id: 10, row: 2, col: 2, color: TileColor.Red, special: SpecialType.StripedHorizontal };
+      const wrapped: TileData = { id: 11, row: 2, col: 3, color: TileColor.Blue, special: SpecialType.Wrapped };
+
+      const handlerA = registry.findComboHandler(striped, wrapped);
+      const handlerB = registry.findComboHandler(wrapped, striped);
+
+      expect(handlerA).toBeDefined();
+      expect(handlerB).toBeDefined();
+      expect(handlerA?.name).toBe('GiantCross');
+      expect(handlerB?.name).toBe('GiantCross');
     });
 
     it('allows registering new custom special handlers dynamically without modifying registry core (OCP)', () => {

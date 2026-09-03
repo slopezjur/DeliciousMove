@@ -2,6 +2,7 @@ import {
   ILevelProgression,
   InfiniteLevelProgression,
   LevelConfig,
+  LevelDifficulty,
 } from './LevelProgression.ts';
 
 export enum GameState {
@@ -23,6 +24,8 @@ export interface SessionSnapshot {
   targetScore: number;
   movesLeft: number;
   shufflesLeft: number;
+  accumulatedMoves?: number;
+  difficulty?: LevelDifficulty;
   reason?: GameOverReason;
 }
 
@@ -34,13 +37,37 @@ export interface GameSessionListener {
   onStateChanged?: (newState: GameState, snapshot: SessionSnapshot) => void;
 }
 
-export class GameSession {
+export interface IGameSession {
+  addListener(listener: GameSessionListener): () => void;
+  restart(): void;
+  advanceLevel(): void;
+  startLevel(level: number, carriedMoves?: number): void;
+  getLevelConfig(): LevelConfig;
+  getLevel(): number;
+  getScore(): number;
+  getMovesLeft(): number;
+  getShufflesLeft(): number;
+  getAccumulatedMoves(): number;
+  getTargetScore(): number;
+  getState(): GameState;
+  getGameOverReason(): GameOverReason | undefined;
+  getSnapshot(): SessionSnapshot;
+  canMakeMove(): boolean;
+  onMoveInitiated(): void;
+  addPoints(points: number): void;
+  consumeShuffle(): boolean;
+  endWithDeadlock(): GameState;
+  onTurnCompleted(): GameState;
+}
+
+export class GameSession implements IGameSession {
   private readonly progression: ILevelProgression;
 
   private config: LevelConfig;
   private currentScore: number = 0;
   private movesLeft: number;
   private shufflesLeft: number;
+  private accumulatedMoves: number = 0;
   private state: GameState = GameState.Ready;
   private gameOverReason?: GameOverReason;
   private listeners: GameSessionListener[] = [];
@@ -59,20 +86,23 @@ export class GameSession {
     };
   }
 
-  /** Restarts the run from level 1. */
+  /** Restarts the run from level 1 and resets banked moves. */
   public restart(): void {
-    this.startLevel(1);
+    this.accumulatedMoves = 0;
+    this.startLevel(1, 0);
   }
 
-  /** Moves on to the next level of the endless ladder. */
+  /** Moves on to the next level, carrying over unused moves. */
   public advanceLevel(): void {
-    this.startLevel(this.config.level + 1);
+    const surplusMoves = Math.max(0, this.movesLeft);
+    this.startLevel(this.config.level + 1, surplusMoves);
   }
 
-  public startLevel(level: number): void {
+  public startLevel(level: number, carriedMoves: number = 0): void {
     this.config = this.progression.getConfig(level);
     this.currentScore = 0;
-    this.movesLeft = this.config.moves;
+    this.accumulatedMoves = carriedMoves;
+    this.movesLeft = this.config.moves + carriedMoves;
     this.shufflesLeft = this.config.shuffles;
     this.gameOverReason = undefined;
     this.setState(GameState.Ready);
@@ -103,6 +133,10 @@ export class GameSession {
     return this.shufflesLeft;
   }
 
+  public getAccumulatedMoves(): number {
+    return this.accumulatedMoves;
+  }
+
   public getTargetScore(): number {
     return this.config.targetScore;
   }
@@ -122,6 +156,8 @@ export class GameSession {
       targetScore: this.config.targetScore,
       movesLeft: this.movesLeft,
       shufflesLeft: this.shufflesLeft,
+      accumulatedMoves: this.accumulatedMoves,
+      difficulty: this.config.difficulty,
       reason: this.gameOverReason,
     };
   }

@@ -14,6 +14,8 @@ export class HUDView implements IHUDView {
   private targetEl: HTMLElement | null;
   private levelEl: HTMLElement | null;
   private shufflesEl: HTMLElement | null;
+  private difficultyBadgeEl: HTMLElement | null;
+  private movesBonusBadgeEl: HTMLElement | null;
   private progressFill: HTMLElement | null;
   private soundBtn: HTMLElement | null;
 
@@ -38,6 +40,8 @@ export class HUDView implements IHUDView {
     this.targetEl = this.findElement('target-value');
     this.levelEl = this.findElement('level-value');
     this.shufflesEl = this.findElement('shuffles-value');
+    this.difficultyBadgeEl = this.findElement('difficulty-badge');
+    this.movesBonusBadgeEl = this.findElement('moves-bonus-badge');
     this.progressFill = this.findElement('progress-fill');
     this.soundBtn = this.findElement('sound-toggle-btn');
 
@@ -49,7 +53,7 @@ export class HUDView implements IHUDView {
     }
   }
 
-  public initLevel(config: LevelConfig): void {
+  public initLevel(config: LevelConfig, bonusMoves: number = 0): void {
     this.currentScore = 0;
     this.displayedScore = 0;
     this.targetScore = config.targetScore;
@@ -59,7 +63,21 @@ export class HUDView implements IHUDView {
     this.setText(this.targetEl, config.targetScore.toLocaleString());
     if (this.progressFill) this.progressFill.style.width = '0%';
 
-    this.updateMoves(config.moves);
+    if (this.difficultyBadgeEl && config.difficulty) {
+      this.difficultyBadgeEl.textContent = config.difficulty.replace('_', ' ').toUpperCase();
+      this.difficultyBadgeEl.className = `difficulty-badge difficulty-${config.difficulty}`;
+    }
+
+    if (this.movesBonusBadgeEl) {
+      if (bonusMoves > 0) {
+        this.movesBonusBadgeEl.textContent = `+${bonusMoves}`;
+        this.movesBonusBadgeEl.classList.remove('hidden');
+      } else {
+        this.movesBonusBadgeEl.classList.add('hidden');
+      }
+    }
+
+    this.updateMoves(config.moves + bonusMoves);
     this.updateShuffles(config.shuffles);
     this.modal.hide();
   }
@@ -81,8 +99,12 @@ export class HUDView implements IHUDView {
     if (this.progressFill) this.progressFill.style.width = `${progress}%`;
   }
 
-  public showVictory(score: number, level: number): void {
-    this.modal.showVictory(score, level);
+  public showVictory(score: number, level: number, movesSaved?: number): void {
+    if (movesSaved !== undefined) {
+      this.modal.showVictory(score, level, movesSaved);
+    } else {
+      this.modal.showVictory(score, level);
+    }
   }
 
   public showGameOver(score: number, level: number, reason: GameOverReason): void {

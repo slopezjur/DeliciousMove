@@ -1,18 +1,26 @@
 import { Board } from '../Board.ts';
 import { TileData, SpecialType, TileColor } from '../TileTypes.ts';
 
+import { Position } from '../TileTypes.ts';
+
 export type ComboEffectType =
   | SpecialType
   | 'combo_cross'
   | 'combo_color_bomb_striped'
   | 'combo_double_color_bomb'
   | 'combo_giant_cross'
-  | 'combo_giant_wrapped';
+  | 'combo_giant_wrapped'
+  | 'combo_airplane_airplane'
+  | 'combo_airplane_striped'
+  | 'combo_airplane_wrapped'
+  | 'combo_color_bomb_airplane';
 
 export interface SpecialTriggerEffect {
   sourceTile: TileData;
   affectedTileIds: number[];
   effectType: ComboEffectType;
+  targetTile?: Position & { id: number };
+  secondaryTargets?: (Position & { id: number })[];
 }
 
 /**

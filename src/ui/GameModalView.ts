@@ -42,11 +42,14 @@ export class GameModalView implements IGameModalView {
     }
   }
 
-  public showVictory(score: number, level: number): void {
+  public showVictory(score: number, level: number, movesSaved: number = 0): void {
     this.soundService.playVictory();
+    const savedMsg = movesSaved > 0
+      ? `🎉 ${movesSaved} unused moves banked for Level ${level + 1}!`
+      : `Level ${level + 1} is waiting!`;
     this.render({
       title: '🎉 Sweet Victory!',
-      detail: `Level ${level} cleared. Level ${level + 1} is tougher.`,
+      detail: `Level ${level} cleared. ${savedMsg}`,
       score,
       buttonLabel: 'Next Level →',
     });

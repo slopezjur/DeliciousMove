@@ -30,6 +30,7 @@ interface SpawnTargetSelection {
 
 export interface ICascadeResolver {
   resolveSwap(board: Board, posA: Position, posB: Position): SwapResult;
+  resolveActivation(board: Board, pos: Position): SwapResult;
 }
 
 export class CascadeResolver implements ICascadeResolver {
@@ -54,6 +55,27 @@ export class CascadeResolver implements ICascadeResolver {
   }
 
   /**
+   * Direct detonation of a clicked special candy.
+   */
+  public resolveActivation(board: Board, pos: Position): SwapResult {
+    const tile = board.get(pos.row, pos.col);
+    if (!tile || tile.special === SpecialType.None) {
+      return { valid: false, steps: [] };
+    }
+
+    const destroyedTileIds = new Set<number>();
+    const effects: SpecialTriggerEffect[] = [];
+    this.specialResolver.detonate(board, [{ specials: [tile] }], destroyedTileIds, effects);
+
+    const steps: CascadeStep[] = [];
+    steps.push(
+      this.executeDestroyAndCollapse(board, destroyedTileIds, [], [], effects, 1)
+    );
+    this.continueCascades(board, steps, 2);
+    return { valid: true, steps };
+  }
+
+  /**
    * Evaluates a player move between two positions.
    * If valid, returns the full sequence of cascade steps to animate.
    */
@@ -70,7 +92,7 @@ export class CascadeResolver implements ICascadeResolver {
     // in the cells the player actually dropped them into.
     board.swap(posA, posB);
 
-    // 1. Direct special-on-special combos bypass color matching entirely.
+    // 1. Direct special combos (two specials swapped together)
     const specialCombo = this.specialResolver.resolveSpecialSwapCombo(board, posA, posB);
     if (specialCombo.executed) {
       const steps: CascadeStep[] = [];
@@ -81,14 +103,44 @@ export class CascadeResolver implements ICascadeResolver {
       return { valid: true, steps };
     }
 
-    // 2. Otherwise the swap must produce at least one color match.
-    if (this.matchDetector.detectMatches(board, [posA, posB]).length === 0) {
+    const tileA = board.get(posA.row, posA.col)!;
+    const tileB = board.get(posB.row, posB.col)!;
+    const hasSpecialInvolved = tileA.special !== SpecialType.None || tileB.special !== SpecialType.None;
+
+    const matches = this.matchDetector.detectMatches(board, [posA, posB]);
+
+    // 2. If neither tile is special, the swap must produce at least one color match.
+    if (!hasSpecialInvolved && matches.length === 0) {
       board.swap(posA, posB); // Revert
       return { valid: false, steps: [] };
     }
 
     const steps: CascadeStep[] = [];
-    const step = this.processMatchPass(board, [posA, posB], 1);
+
+    // 3. If a special was dragged/swapped without forming a 3-color match, detonate it directly!
+    if (hasSpecialInvolved && matches.length === 0) {
+      const destroyedTileIds = new Set<number>();
+      const effects: SpecialTriggerEffect[] = [];
+      const specialsToDetonate: TileData[] = [];
+      if (tileA.special !== SpecialType.None) specialsToDetonate.push(tileA);
+      if (tileB.special !== SpecialType.None) specialsToDetonate.push(tileB);
+
+      this.specialResolver.detonate(board, [{ specials: specialsToDetonate }], destroyedTileIds, effects);
+      steps.push(
+        this.executeDestroyAndCollapse(board, destroyedTileIds, [], [], effects, 1)
+      );
+      this.continueCascades(board, steps, 2);
+      return { valid: true, steps };
+    }
+
+    // 4. Otherwise process matches, also including any swapped specials that were not in match groups
+    const swappedSpecials: TileData[] = [];
+    if (hasSpecialInvolved) {
+      if (tileA.special !== SpecialType.None) swappedSpecials.push(tileA);
+      if (tileB.special !== SpecialType.None) swappedSpecials.push(tileB);
+    }
+
+    const step = this.processMatchPass(board, [posA, posB], 1, swappedSpecials);
     if (step) {
       steps.push(step);
       this.continueCascades(board, steps, 2);
@@ -112,10 +164,11 @@ export class CascadeResolver implements ICascadeResolver {
   public processMatchPass(
     board: Board,
     interactionPositions: Position[],
-    multiplier: number
+    multiplier: number,
+    additionalSpecials: TileData[] = []
   ): CascadeStep | null {
     const matchGroups = this.matchDetector.detectMatches(board, interactionPositions);
-    if (matchGroups.length === 0) return null;
+    if (matchGroups.length === 0 && additionalSpecials.length === 0) return null;
 
     const destroyedIds = new Set<number>();
     const spawnedSpecials: TileData[] = [];
@@ -129,6 +182,9 @@ export class CascadeResolver implements ICascadeResolver {
         const { target, displaced } = this.selectSpawnTarget(group);
         if (displaced) caughtSpecials.push(displaced);
 
+        const spawnRow = target.row;
+        const spawnCol = target.col;
+
         target.special = group.spawnSpecial.type;
         target.color = group.spawnSpecial.color;
         spawnedSpecials.push(target);
@@ -140,7 +196,11 @@ export class CascadeResolver implements ICascadeResolver {
           convergingIds.push(t.id);
           if (t.special !== SpecialType.None) caughtSpecials.push(t);
         }
-        evolutions.push({ specialTile: target, sourceTileIds: convergingIds });
+        evolutions.push({
+          specialTile: target,
+          spawnPosition: { row: spawnRow, col: spawnCol },
+          sourceTileIds: convergingIds,
+        });
       } else {
         for (const t of group.tiles) {
           destroyedIds.add(t.id);
@@ -153,14 +213,21 @@ export class CascadeResolver implements ICascadeResolver {
       }
     }
 
+    // Include any additional specials (such as dragged special candies)
+    if (additionalSpecials.length > 0) {
+      const unhandled = additionalSpecials.filter((s) => !spawnedSpecials.some((sp) => sp.id === s.id));
+      if (unhandled.length > 0) {
+        detonationBatches.push({ specials: unhandled });
+      }
+    }
+
     const triggeredEffects: SpecialTriggerEffect[] = [];
     if (detonationBatches.length > 0) {
       this.specialResolver.detonate(board, detonationBatches, destroyedIds, triggeredEffects);
     }
 
     // Newly spawned specials always survive their own pass, even when a chained blast
-    // sweeps the cell they were created in. Applied after detonation so the chain
-    // cannot re-add them to the destruction set.
+    // sweeps the cell they were created in.
     this.protectSpawnedSpecials(spawnedSpecials, destroyedIds, triggeredEffects);
 
     return this.executeDestroyAndCollapse(
@@ -174,46 +241,8 @@ export class CascadeResolver implements ICascadeResolver {
   }
 
   /**
-   * Picks the tile a match evolves into. A plain tile is preferred so an existing special
-   * inside the match is not silently overwritten; when the whole group is special, the
-   * displaced candy is reported so it still detonates.
+   * Drops surviving tiles into empty space, refills top slots, and records the score.
    */
-  private selectSpawnTarget(group: MatchGroup): SpawnTargetSelection {
-    const { position } = group.spawnSpecial!;
-    const preferred = group.tiles.find((t) => t.row === position.row && t.col === position.col);
-
-    if (preferred && preferred.special === SpecialType.None) {
-      return { target: preferred, displaced: null };
-    }
-
-    const plain = group.tiles.find((t) => t.special === SpecialType.None);
-    if (plain) {
-      return { target: plain, displaced: null };
-    }
-
-    // Whole group is special: snapshot the candy being overwritten so its blast still
-    // fires. It keeps the target id so the blast does not re-detonate the new special,
-    // which protectSpawnedSpecials then rescues from the destruction set.
-    const target = preferred ?? group.tiles[0];
-    return { target, displaced: { ...target } };
-  }
-
-  private protectSpawnedSpecials(
-    spawnedSpecials: TileData[],
-    destroyedIds: Set<number>,
-    triggeredEffects: SpecialTriggerEffect[]
-  ): void {
-    if (spawnedSpecials.length === 0) return;
-
-    const protectedIds = new Set(spawnedSpecials.map((s) => s.id));
-    protectedIds.forEach((id) => destroyedIds.delete(id));
-
-    // Keep the VFX payload consistent with what actually gets destroyed.
-    for (const effect of triggeredEffects) {
-      effect.affectedTileIds = effect.affectedTileIds.filter((id) => !protectedIds.has(id));
-    }
-  }
-
   private executeDestroyAndCollapse(
     board: Board,
     destroyedIds: Set<number>,
@@ -222,30 +251,69 @@ export class CascadeResolver implements ICascadeResolver {
     triggeredEffects: SpecialTriggerEffect[],
     multiplier: number
   ): CascadeStep {
-    // 1. Remove destroyed tiles
+    // 1. Clear destroyed tiles from the board
     board.forEachTile((t, r, c) => {
       if (destroyedIds.has(t.id)) {
         board.set(r, c, null);
       }
     });
 
-    // 2. Delegate gravity simulation to BoardGravitySystem (SRP)
     const drops = this.gravitySystem.applyGravity(board);
-
-    // 3. Delegate top tile refill to TileSpawner (SRP)
     const spawns = this.tileSpawner.refillEmptySlots(board);
-
-    // 4. Delegate score evaluation to ScoreCalculator (SRP)
     const scoreGained = this.scoreCalculator.calculateStepScore(destroyedIds.size, multiplier);
 
     return {
       matchedTileIds: Array.from(destroyedIds),
       spawnedSpecials,
-      evolutions,
-      triggeredSpecials: triggeredEffects,
+      evolutions: evolutions.length > 0 ? evolutions : undefined,
       drops,
       spawns,
       scoreGained,
+      triggeredSpecials: triggeredEffects,
     };
+  }
+
+  /**
+   * Determines which tile in a group becomes the upgraded special candy.
+   * If that cell already held a special, reports it so the overwritten effect still fires.
+   */
+  private selectSpawnTarget(group: MatchGroup): SpawnTargetSelection {
+    const desired = group.spawnSpecial!.position;
+    const existing = group.tiles.find((t) => t.row === desired.row && t.col === desired.col);
+    const plainTile = group.tiles.find((t) => t.special === SpecialType.None);
+
+    const target =
+      existing && existing.special === SpecialType.None
+        ? existing
+        : (plainTile ?? existing ?? group.tiles[0]);
+
+    const displaced =
+      target.special !== SpecialType.None
+        ? {
+            id: target.id,
+            row: target.row,
+            col: target.col,
+            color: target.color,
+            special: target.special,
+          }
+        : null;
+
+    return { target, displaced };
+  }
+
+  /**
+   * Newly spawned specials are protected from destruction during the pass that created them.
+   */
+  private protectSpawnedSpecials(
+    spawnedSpecials: TileData[],
+    destroyedIds: Set<number>,
+    effects: SpecialTriggerEffect[]
+  ): void {
+    for (const spec of spawnedSpecials) {
+      destroyedIds.delete(spec.id);
+      for (const eff of effects) {
+        eff.affectedTileIds = eff.affectedTileIds.filter((id) => id !== spec.id);
+      }
+    }
   }
 }

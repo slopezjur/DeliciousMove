@@ -14,6 +14,7 @@ import {
   ILevelProgression,
   InfiniteLevelProgression,
   LevelConfig,
+  LevelDifficulty,
 } from '../src/core/LevelProgression.ts';
 import { SeededRandomSource } from '../src/core/random/IRandomSource.ts';
 import { ALL_TILE_COLORS, Position, TileColor } from '../src/core/TileTypes.ts';
@@ -21,11 +22,19 @@ import { TurnCoordinator } from '../src/TurnCoordinator.ts';
 import { IAnimationSequencer } from '../src/view/IAnimationSequencer.ts';
 import { IBoardViewAnimator } from '../src/view/IBoardViewContracts.ts';
 import { TileSprite } from '../src/view/TileSprite.ts';
+import { IGameTelemetryService } from '../src/core/telemetry/IGameTelemetry.ts';
 
 class FixedProgression implements ILevelProgression {
-  constructor(private readonly template: Omit<LevelConfig, 'level'>) {}
+  constructor(private readonly template: Partial<LevelConfig>) {}
   public getConfig(level: number): LevelConfig {
-    return { level, ...this.template };
+    return {
+      level,
+      difficulty: LevelDifficulty.Easy,
+      moves: 20,
+      targetScore: 1000,
+      shuffles: 2,
+      ...this.template,
+    };
   }
 }
 
@@ -179,20 +188,27 @@ describe('TurnCoordinator', () => {
       expect(session.canMakeMove()).toBe(true);
     });
 
-    it('keeps escalating targets across many levels with the real progression', () => {
+    it('alternates difficulty and escalates cycle-over-cycle targets across many levels with the real progression', () => {
       const session = new GameSession(new InfiniteLevelProgression());
       session.startLevel(1);
 
-      const targets: number[] = [];
+      const configs: LevelConfig[] = [];
       for (let i = 0; i < 12; i++) {
-        targets.push(session.getTargetScore());
+        configs.push(session.getLevelConfig());
         session.advanceLevel();
       }
 
       expect(session.getLevel()).toBe(13);
-      for (let i = 1; i < targets.length; i++) {
-        expect(targets[i]).toBeGreaterThan(targets[i - 1]);
-      }
+      // Difficulty alternates in a 4-tier cycle
+      expect(configs[0].difficulty).toBe(LevelDifficulty.Easy);
+      expect(configs[1].difficulty).toBe(LevelDifficulty.Medium);
+      expect(configs[2].difficulty).toBe(LevelDifficulty.Hard);
+      expect(configs[3].difficulty).toBe(LevelDifficulty.VeryHard);
+      expect(configs[4].difficulty).toBe(LevelDifficulty.Easy);
+
+      // Cycle-over-cycle targets escalate
+      expect(configs[4].targetScore).toBeGreaterThan(configs[0].targetScore);
+      expect(configs[8].targetScore).toBeGreaterThan(configs[4].targetScore);
     });
   });
 
@@ -328,9 +344,9 @@ describe('TurnCoordinator', () => {
     });
 
     it('leaves most games unjammed, so the risk stays occasional rather than routine', () => {
-      // 5 * 7919 jams only on the very last move; 1 * 7919 never jams at all.
+      // 1 * 7919 never jams; 24 * 7919 jams at move 17.
       expect(playUntilJam(7919)).toBe(-1);
-      expect(playUntilJam(39595, 26)).toBe(25);
+      expect(playUntilJam(190056)).toBe(17);
     });
 
     it('turns a real jam into a loss once the rescue budget is gone', async () => {
@@ -378,5 +394,43 @@ describe('TurnCoordinator', () => {
     );
     expect(onMovesUpdated).toHaveBeenCalledWith(9);
     expect(onShufflesUpdated).toHaveBeenCalledWith(0);
+  });
+
+  it('records rich cascade telemetry when telemetry service is injected', async () => {
+    const board = boardWithPendingMatch();
+    const session = new GameSession(new FixedProgression({ moves: 10, targetScore: 99999, shuffles: 1 }));
+    session.startLevel(1);
+
+    const mockTelemetry: IGameTelemetryService = {
+      recordSwap: vi.fn(),
+      recordActivation: vi.fn(),
+      recordShuffle: vi.fn(),
+      recordStateTransition: vi.fn(),
+      getRecentMoves: vi.fn().mockReturnValue([]),
+      getSnapshot: vi.fn() as any,
+      exportDiagnosticJson: vi.fn().mockReturnValue('{}'),
+    };
+
+    const coordinator = new TurnCoordinator({
+      board,
+      boardView: fakeBoardView(board),
+      animations: new FakeAnimator(),
+      cascadeResolver: makeCascadeResolver(),
+      deadlockResolver: new StubDeadlockResolver(true, true),
+      session,
+      telemetry: mockTelemetry,
+    });
+
+    await coordinator.playMove(...MATCH_SWAP);
+
+    expect(mockTelemetry.recordSwap).toHaveBeenCalledWith(
+      MATCH_SWAP[0],
+      MATCH_SWAP[1],
+      true,
+      expect.any(Number),
+      expect.any(Number),
+      expect.any(Array),
+      expect.any(Array)
+    );
   });
 });

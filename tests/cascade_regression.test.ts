@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Board } from '../src/core/Board.ts';
 import { CascadeResolver } from '../src/core/CascadeResolver.ts';
 import { MatchDetector } from '../src/core/MatchDetector.ts';
@@ -10,7 +10,9 @@ import { TileSpawner } from '../src/core/TileSpawner.ts';
 import { SpecialRegistry, ColorBombHandler } from '../src/core/specials/SpecialRegistry.ts';
 import { BoardInitializer } from '../src/core/BoardInitializer.ts';
 import { SeededRandomSource } from '../src/core/random/IRandomSource.ts';
-import { TileColor, SpecialType, TileData } from '../src/core/TileTypes.ts';
+import { TileColor, SpecialType, TileData, CascadeStep } from '../src/core/TileTypes.ts';
+import { AnimationQueue } from '../src/view/AnimationQueue.ts';
+import { IBoardViewAnimator } from '../src/view/IBoardViewContracts.ts';
 
 /** Resolver whose refills are seeded, so cascades are reproducible run to run. */
 const makeResolver = (seed = 3) =>
@@ -251,6 +253,85 @@ describe('Cascade regressions', () => {
       expect(result.valid).toBe(true);
       expect(result.steps.length).toBeLessThanOrEqual(26);
       expect(result.steps.every((s) => s.scoreGained > 0)).toBe(true);
+    });
+
+    it('preserves pre-gravity spawnPosition for special evolutions', () => {
+      inertFill(board);
+      board.get(2, 0)!.color = TileColor.Red;
+      board.get(2, 1)!.color = TileColor.Red;
+      board.get(2, 2)!.color = TileColor.Red;
+      board.get(1, 3)!.color = TileColor.Red;
+      board.get(2, 3)!.color = TileColor.Blue;
+
+      // Swap (1, 3) and (2, 3) to form a horizontal 4-in-a-row at row 2
+      const result = makeResolver().resolveSwap(board, { row: 1, col: 3 }, { row: 2, col: 3 });
+      expect(result.valid).toBe(true);
+      const step1 = result.steps[0];
+      expect(step1.evolutions).toBeDefined();
+      expect(step1.evolutions!.length).toBe(1);
+      const evo = step1.evolutions![0];
+      expect(evo.spawnPosition).toBeDefined();
+      expect(evo.spawnPosition!.row).toBe(2);
+    });
+
+    it('ensures constant fall velocity maintains monotonic spatial separation in multi-hole columns', () => {
+      inertFill(board);
+      // Create holes at row 3 and row 6 in col 7
+      board.set(3, 7, null);
+      board.set(6, 7, null);
+
+      const drops = new BoardGravitySystem().applyGravity(board);
+      expect(drops.length).toBeGreaterThan(0);
+
+      // Verify for every pair of dropping tiles in the column, the lower tile has a final row > upper tile
+      const colDrops = drops.filter((d) => d.col === 7);
+      for (let i = 0; i < colDrops.length; i++) {
+        for (let j = i + 1; j < colDrops.length; j++) {
+          const a = colDrops[i];
+          const b = colDrops[j];
+          if (a.fromRow > b.fromRow) {
+            expect(a.toRow).toBeGreaterThan(b.toRow);
+          } else if (a.fromRow < b.fromRow) {
+            expect(a.toRow).toBeLessThan(b.toRow);
+          }
+        }
+      }
+    });
+
+    it('performs full syncSpritesWithBoard reconciliation once upon cascade completion to avoid premature state leakage', async () => {
+      const syncMock = vi.fn();
+      const removeMock = vi.fn();
+      const fakeBoardView: IBoardViewAnimator = {
+        board,
+        tileSize: 64,
+        boardPixelWidth: 512,
+        boardPixelHeight: 512,
+        vfx: { createFloatingText: vi.fn(), screenShake: vi.fn(), createParticleBurst: vi.fn() } as any,
+        gridToLocal: vi.fn().mockReturnValue({ x: 0, y: 0 }),
+        getTileSprite: vi.fn().mockReturnValue(undefined),
+        addTileSprite: vi.fn().mockReturnValue({ x: 0, y: 0, scale: { set: vi.fn() } } as any),
+        removeTileSprite: removeMock,
+        getTileSpritesMap: vi.fn().mockReturnValue(new Map()),
+        screenShake: vi.fn(),
+        syncSpritesWithBoard: syncMock,
+      };
+
+      const queue = new AnimationQueue(fakeBoardView);
+      const dummyStep: CascadeStep = {
+        matchedTileIds: [99],
+        spawnedSpecials: [],
+        drops: [],
+        spawns: [],
+        scoreGained: 100,
+      };
+
+      // 3-step cascade
+      await queue.playCascadeSteps([dummyStep, { ...dummyStep, scoreGained: 200 }, { ...dummyStep, scoreGained: 300 }], () => {});
+
+      // Intermediate steps must remove matched tiles directly without leaking future board state
+      expect(removeMock).toHaveBeenCalledWith(99);
+      // Final reconciliation against domain board must execute exactly once when all cascades finish
+      expect(syncMock).toHaveBeenCalledTimes(1);
     });
   });
 });

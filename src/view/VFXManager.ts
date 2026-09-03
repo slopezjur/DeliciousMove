@@ -2,7 +2,22 @@ import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import gsap from 'gsap';
 import { TileColor } from '../core/TileTypes.ts';
 
-export class VFXManager {
+export interface IVFXManager {
+  createParticleBurst(x: number, y: number, color: TileColor, count?: number): void;
+  createLaserBeam(x: number, y: number, length: number, isHorizontal: boolean): void;
+  createShockwave(x: number, y: number, radius: number): void;
+  createFloatingText(x: number, y: number, message: string, color?: number): void;
+  screenShake(target: Container, intensity?: number): void;
+  launchAirplane(
+    startX: number,
+    startY: number,
+    targetX: number,
+    targetY: number,
+    onImpact: () => void
+  ): Promise<void>;
+}
+
+export class VFXManager implements IVFXManager {
   private container: Container;
 
   constructor(container: Container) {
@@ -148,5 +163,70 @@ export class VFXManager {
       .to(target, { x: originalX - intensity, y: originalY + intensity, duration: 0.04 })
       .to(target, { x: originalX + intensity * 0.5, y: originalY - intensity * 0.5, duration: 0.04 })
       .to(target, { x: originalX, y: originalY, duration: 0.04 });
+  }
+
+  public launchAirplane(
+    startX: number,
+    startY: number,
+    targetX: number,
+    targetY: number,
+    onImpact: () => void
+  ): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const plane = new Graphics();
+      plane.poly([0, -18, -20, 14, 0, 8]);
+      plane.fill({ color: 0xffffff });
+      plane.stroke({ color: 0x00e5ff, width: 2 });
+      plane.poly([0, -18, 20, 14, 0, 8]);
+      plane.fill({ color: 0xe0f7fa });
+      plane.stroke({ color: 0x00e5ff, width: 2 });
+
+      plane.x = startX;
+      plane.y = startY;
+      plane.scale.set(0.6);
+
+      const angle = Math.atan2(targetY - startY, targetX - startX) + Math.PI / 2;
+      plane.rotation = angle;
+
+      this.container.addChild(plane);
+
+      const midX = (startX + targetX) / 2 + (Math.random() - 0.5) * 60;
+      const midY = Math.min(startY, targetY) - 50;
+
+      let completed = false;
+      const cleanup = () => {
+        if (completed) return;
+        completed = true;
+        try {
+          this.container.removeChild(plane);
+          plane.destroy();
+          onImpact();
+        } catch (err) {
+          console.error('[DeliciousMove] Airplane impact error:', err);
+        } finally {
+          resolve();
+        }
+      };
+
+      const tl = gsap.timeline({
+        onComplete: cleanup,
+      });
+
+      setTimeout(() => {
+        cleanup();
+      }, 1200);
+
+      tl.to(plane, {
+        x: midX,
+        y: midY,
+        duration: 0.22,
+        ease: 'power1.out',
+      }).to(plane, {
+        x: targetX,
+        y: targetY,
+        duration: 0.24,
+        ease: 'power2.in',
+      });
+    });
   }
 }

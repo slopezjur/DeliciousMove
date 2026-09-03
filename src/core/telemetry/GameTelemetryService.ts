@@ -1,0 +1,189 @@
+import { Board } from '../Board.ts';
+import { IGameSession } from '../GameSession.ts';
+import { IDeadlockResolver } from '../ShuffleEngine.ts';
+import { IInputController } from '../../input/InputController.ts';
+import { Position, SpecialType, TileColor } from '../TileTypes.ts';
+import {
+  IGameTelemetryService,
+  TelemetryActionType,
+  TelemetryMoveRecord,
+  TelemetryStateSnapshot,
+} from './IGameTelemetry.ts';
+
+const MAX_HISTORY_SIZE = 25;
+
+export interface GameTelemetryDependencies {
+  board: Board;
+  session: IGameSession;
+  deadlockResolver: IDeadlockResolver;
+  inputController: IInputController;
+}
+
+export class GameTelemetryService implements IGameTelemetryService {
+  private readonly deps: GameTelemetryDependencies;
+  private readonly history: TelemetryMoveRecord[] = [];
+  private sequenceCounter = 0;
+
+  constructor(deps: GameTelemetryDependencies) {
+    this.deps = deps;
+  }
+
+  public recordSwap(
+    from: Position,
+    to: Position,
+    valid: boolean,
+    scoreGained: number,
+    stepsCount: number,
+    specialsFormed: string[] = [],
+    specialsTriggered: string[] = []
+  ): void {
+    const tileFrom = this.deps.board.get(from.row, from.col);
+    this.pushRecord({
+      id: ++this.sequenceCounter,
+      timestamp: new Date().toISOString().substring(11, 23),
+      action: 'swap',
+      from: { ...from },
+      to: { ...to },
+      tileColor: tileFrom?.color,
+      specialType: tileFrom?.special,
+      valid,
+      scoreGained,
+      cascadeStepsCount: stepsCount,
+      specialsFormed,
+      specialsTriggered,
+    });
+  }
+
+  public recordActivation(
+    pos: Position,
+    specialType: SpecialType,
+    scoreGained: number,
+    stepsCount: number,
+    specialsTriggered: string[] = []
+  ): void {
+    this.pushRecord({
+      id: ++this.sequenceCounter,
+      timestamp: new Date().toISOString().substring(11, 23),
+      action: 'activate',
+      from: { ...pos },
+      specialType,
+      valid: true,
+      scoreGained,
+      cascadeStepsCount: stepsCount,
+      specialsFormed: [],
+      specialsTriggered,
+    });
+  }
+
+  public recordShuffle(reason: string, success: boolean): void {
+    this.pushRecord({
+      id: ++this.sequenceCounter,
+      timestamp: new Date().toISOString().substring(11, 23),
+      action: 'shuffle',
+      valid: success,
+      scoreGained: 0,
+      cascadeStepsCount: 0,
+      specialsFormed: [],
+      specialsTriggered: [],
+      notes: reason,
+    });
+  }
+
+  public recordStateTransition(action: TelemetryActionType, notes?: string): void {
+    this.pushRecord({
+      id: ++this.sequenceCounter,
+      timestamp: new Date().toISOString().substring(11, 23),
+      action,
+      valid: true,
+      scoreGained: 0,
+      cascadeStepsCount: 0,
+      specialsFormed: [],
+      specialsTriggered: [],
+      notes,
+    });
+  }
+
+  public getRecentMoves(count: number = 10): TelemetryMoveRecord[] {
+    return this.history.slice(-count);
+  }
+
+  public getSnapshot(): TelemetryStateSnapshot {
+    const { board, session, deadlockResolver, inputController } = this.deps;
+    const config = session.getLevelConfig();
+
+    const specialsOnBoard: Record<string, number> = {};
+    board.forEachTile((t) => {
+      if (t.special !== SpecialType.None) {
+        specialsOnBoard[t.special] = (specialsOnBoard[t.special] || 0) + 1;
+      }
+    });
+
+    let possibleMovesCount = 0;
+    try {
+      possibleMovesCount = deadlockResolver.findPossibleMoves(board).length;
+    } catch {
+      possibleMovesCount = -1;
+    }
+
+    return {
+      timestamp: new Date().toISOString(),
+      level: session.getLevel(),
+      difficulty: config.difficulty,
+      state: session.getState(),
+      isInputLocked: inputController.isLocked(),
+      score: session.getScore(),
+      targetScore: session.getTargetScore(),
+      movesLeft: session.getMovesLeft(),
+      accumulatedBonusMoves: session.getAccumulatedMoves(),
+      shufflesLeft: session.getShufflesLeft(),
+      possibleMovesCount,
+      specialsOnBoard,
+      boardAscii: this.buildBoardAscii(board),
+      recentMoves: this.getRecentMoves(15),
+    };
+  }
+
+  public exportDiagnosticJson(): string {
+    return JSON.stringify(this.getSnapshot(), null, 2);
+  }
+
+  private pushRecord(record: TelemetryMoveRecord): void {
+    this.history.push(record);
+    if (this.history.length > MAX_HISTORY_SIZE) {
+      this.history.shift();
+    }
+  }
+
+  private buildBoardAscii(board: Board): string {
+    const COLOR_LETTERS: Record<number, string> = {
+      [TileColor.Red]: 'R',
+      [TileColor.Blue]: 'B',
+      [TileColor.Green]: 'G',
+      [TileColor.Yellow]: 'Y',
+      [TileColor.Purple]: 'P',
+      [TileColor.Orange]: 'O',
+    };
+
+    const rows: string[] = [];
+    for (let r = 0; r < board.rows; r++) {
+      const cells: string[] = [];
+      for (let c = 0; c < board.cols; c++) {
+        const t = board.get(r, c);
+        if (!t) {
+          cells.push(' . ');
+          continue;
+        }
+        const colInitial = (t.color !== undefined ? COLOR_LETTERS[t.color] : undefined) || '?';
+        let specChar = ' ';
+        if (t.special === SpecialType.StripedHorizontal) specChar = '-';
+        else if (t.special === SpecialType.StripedVertical) specChar = '|';
+        else if (t.special === SpecialType.Wrapped) specChar = '*';
+        else if (t.special === SpecialType.ColorBomb) specChar = '@';
+        else if (t.special === SpecialType.Airplane) specChar = '^';
+        cells.push(`${colInitial}${specChar} `);
+      }
+      rows.push(`R${r}: | ${cells.join('')}|`);
+    }
+    return rows.join('\n');
+  }
+}

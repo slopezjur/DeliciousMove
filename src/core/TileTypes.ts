@@ -22,6 +22,7 @@ export enum SpecialType {
   StripedVertical = 'striped_v',
   Wrapped = 'wrapped',
   ColorBomb = 'color_bomb',
+  Airplane = 'airplane',
 }
 
 export interface Position {
@@ -60,18 +61,17 @@ export interface SpawnData {
 
 export interface SpecialEvolution {
   specialTile: TileData;
+  spawnPosition?: Position;
   sourceTileIds: number[];
 }
+
+import { SpecialTriggerEffect } from './specials/ISpecialHandler.ts';
 
 export interface CascadeStep {
   matchedTileIds: number[];
   spawnedSpecials: TileData[];
   evolutions?: SpecialEvolution[];
-  triggeredSpecials?: {
-    sourceTile: TileData;
-    affectedTileIds: number[];
-    effectType: SpecialType | 'combo_cross' | 'combo_color_bomb_striped' | 'combo_double_color_bomb' | 'combo_giant_cross' | 'combo_giant_wrapped';
-  }[];
+  triggeredSpecials?: SpecialTriggerEffect[];
   drops: DropMovement[];
   spawns: SpawnData[];
   scoreGained: number;

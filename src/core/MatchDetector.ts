@@ -37,7 +37,6 @@ export class MatchDetector implements IMatchDetector {
    */
   public detectMatches(board: Board, interactionPositions: Position[] = []): MatchGroup[] {
     const rawRuns = this.findRawRuns(board);
-    if (rawRuns.length === 0) return [];
 
     const hRuns = rawRuns.filter((r) => r.orientation === 'horizontal');
     const vRuns = rawRuns.filter((r) => r.orientation === 'vertical');
@@ -45,9 +44,20 @@ export class MatchDetector implements IMatchDetector {
     const matchedGroups: MatchGroup[] = [];
     const consumedH = new Set<RawRun>();
     const consumedV = new Set<RawRun>();
+    const consumedTileIds = new Set<number>();
+
+    const context = {
+      hRuns,
+      vRuns,
+      consumedH,
+      consumedV,
+      interactionPositions,
+      board,
+      consumedTileIds,
+    };
 
     for (const rule of this.registry.getRules()) {
-      const matches = rule.evaluate(hRuns, vRuns, consumedH, consumedV, interactionPositions);
+      const matches = rule.evaluate(context);
       matchedGroups.push(...matches);
     }
 

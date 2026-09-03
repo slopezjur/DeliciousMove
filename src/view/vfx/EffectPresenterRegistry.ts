@@ -1,6 +1,6 @@
 import { SpecialType } from '../../core/TileTypes.ts';
 import { ComboEffectType, SpecialTriggerEffect } from '../../core/specials/ISpecialHandler.ts';
-import { EffectPresentationContext, IEffectPresenter } from './IEffectPresenter.ts';
+import { EffectPresentationContext, IEffectPresenter, IEffectPresenterRegistry } from './IEffectPresenter.ts';
 
 export class StripedBeamPresenter implements IEffectPresenter {
   public canPresent(effectType: ComboEffectType): boolean {
@@ -37,20 +37,25 @@ export class CrossBeamPresenter implements IEffectPresenter {
     return effectType === 'combo_cross' || effectType === 'combo_giant_cross';
   }
 
-  public present(_effect: SpecialTriggerEffect, ctx: EffectPresentationContext): void {
-    ctx.boardView.vfx.createLaserBeam(
-      ctx.position.x,
-      ctx.position.y,
-      ctx.boardView.boardPixelWidth,
-      true
-    );
-    ctx.boardView.vfx.createLaserBeam(
-      ctx.position.x,
-      ctx.position.y,
-      ctx.boardView.boardPixelHeight,
-      false
-    );
-    ctx.boardView.screenShake(10);
+  public present(effect: SpecialTriggerEffect, ctx: EffectPresentationContext): void {
+    const isGiant = effect.effectType === 'combo_giant_cross';
+    const offsets = isGiant ? [-ctx.boardView.tileSize, 0, ctx.boardView.tileSize] : [0];
+
+    for (const offset of offsets) {
+      ctx.boardView.vfx.createLaserBeam(
+        ctx.position.x,
+        ctx.position.y + offset,
+        ctx.boardView.boardPixelWidth,
+        true
+      );
+      ctx.boardView.vfx.createLaserBeam(
+        ctx.position.x + offset,
+        ctx.position.y,
+        ctx.boardView.boardPixelHeight,
+        false
+      );
+    }
+    ctx.boardView.screenShake(isGiant ? 14 : 10);
     ctx.sound.playBombExplosion();
   }
 }
@@ -76,7 +81,9 @@ export class ColorBombPresenter implements IEffectPresenter {
   }
 }
 
-export class EffectPresenterRegistry {
+import { AirplaneFlightPresenter } from './AirplaneFlightPresenter.ts';
+
+export class EffectPresenterRegistry implements IEffectPresenterRegistry {
   private presenters: IEffectPresenter[] = [];
 
   constructor(presenters?: IEffectPresenter[]) {
@@ -85,6 +92,7 @@ export class EffectPresenterRegistry {
       new WrappedShockwavePresenter(),
       new CrossBeamPresenter(),
       new ColorBombPresenter(),
+      new AirplaneFlightPresenter(),
     ];
   }
 
@@ -93,7 +101,10 @@ export class EffectPresenterRegistry {
   }
 
   /** Plays the first presenter that claims the effect; unknown effects are silently skipped. */
-  public present(effect: SpecialTriggerEffect, context: EffectPresentationContext): void {
-    this.presenters.find((p) => p.canPresent(effect.effectType))?.present(effect, context);
+  public async present(effect: SpecialTriggerEffect, context: EffectPresentationContext): Promise<void> {
+    const presenter = this.presenters.find((p) => p.canPresent(effect.effectType));
+    if (presenter) {
+      await presenter.present(effect, context);
+    }
   }
 }
