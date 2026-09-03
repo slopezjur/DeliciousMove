@@ -1,8 +1,5 @@
 import { IHUDView } from './IHUDView.ts';
-import { IGameModalView } from './IGameModalView.ts';
-import { GameModalView } from './GameModalView.ts';
 import { LevelConfig } from '../core/LevelProgression.ts';
-import { GameOverReason } from '../core/GameSession.ts';
 import { ISoundService } from '../audio/ISoundService.ts';
 import { soundManagerInstance } from '../audio/SoundManager.ts';
 
@@ -10,38 +7,38 @@ const LOW_MOVES_THRESHOLD = 5;
 
 export class HUDView implements IHUDView {
   private scoreEl: HTMLElement | null;
+  private globalScoreEl: HTMLElement | null;
   private movesEl: HTMLElement | null;
   private targetEl: HTMLElement | null;
   private levelEl: HTMLElement | null;
   private shufflesEl: HTMLElement | null;
   private difficultyBadgeEl: HTMLElement | null;
   private movesBonusBadgeEl: HTMLElement | null;
+  private movesFrozenBadgeEl: HTMLElement | null;
+  private bonusPhaseBadgeEl: HTMLElement | null;
   private progressFill: HTMLElement | null;
   private soundBtn: HTMLElement | null;
 
   private soundService: ISoundService;
-  private modal: IGameModalView;
 
   private currentScore = 0;
   private targetScore = 4000;
   private displayedScore = 0;
   private animFrameId: number = 0;
 
-  constructor(
-    onModalAction: () => void,
-    soundService: ISoundService = soundManagerInstance,
-    modal: IGameModalView = new GameModalView(onModalAction, soundService)
-  ) {
+  constructor(soundService: ISoundService = soundManagerInstance) {
     this.soundService = soundService;
-    this.modal = modal;
 
     this.scoreEl = this.findElement('score-value');
+    this.globalScoreEl = this.findElement('global-score-value');
     this.movesEl = this.findElement('moves-value');
     this.targetEl = this.findElement('target-value');
     this.levelEl = this.findElement('level-value');
     this.shufflesEl = this.findElement('shuffles-value');
     this.difficultyBadgeEl = this.findElement('difficulty-badge');
     this.movesBonusBadgeEl = this.findElement('moves-bonus-badge');
+    this.movesFrozenBadgeEl = this.findElement('moves-frozen-badge');
+    this.bonusPhaseBadgeEl = this.findElement('bonus-phase-indicator');
     this.progressFill = this.findElement('progress-fill');
     this.soundBtn = this.findElement('sound-toggle-btn');
 
@@ -53,15 +50,26 @@ export class HUDView implements IHUDView {
     }
   }
 
-  public initLevel(config: LevelConfig, bonusMoves: number = 0): void {
+  public initLevel(config: LevelConfig, bonusMoves: number = 0, globalScore: number = 0): void {
     this.currentScore = 0;
     this.displayedScore = 0;
     this.targetScore = config.targetScore;
 
     this.setText(this.scoreEl, '0');
+    this.setText(this.globalScoreEl, globalScore.toLocaleString());
     this.setText(this.levelEl, config.level.toString());
     this.setText(this.targetEl, config.targetScore.toLocaleString());
-    if (this.progressFill) this.progressFill.style.width = '0%';
+    if (this.progressFill) {
+      this.progressFill.style.width = '0%';
+      this.progressFill.classList.remove('bonus-phase-glow');
+    }
+
+    if (this.bonusPhaseBadgeEl) {
+      this.bonusPhaseBadgeEl.classList.add('hidden');
+    }
+    if (this.movesFrozenBadgeEl) {
+      this.movesFrozenBadgeEl.classList.add('hidden');
+    }
 
     if (this.difficultyBadgeEl && config.difficulty) {
       this.difficultyBadgeEl.textContent = config.difficulty.replace('_', ' ').toUpperCase();
@@ -77,14 +85,21 @@ export class HUDView implements IHUDView {
       }
     }
 
-    this.updateMoves(config.moves + bonusMoves);
+    this.updateMoves(config.moves + bonusMoves, false);
     this.updateShuffles(config.shuffles);
-    this.modal.hide();
   }
 
-  public updateMoves(moves: number): void {
+  public updateMoves(moves: number, isFrozen = false): void {
     this.setText(this.movesEl, moves.toString());
-    this.movesEl?.classList.toggle('low-moves', moves <= LOW_MOVES_THRESHOLD);
+    if (isFrozen) {
+      this.movesFrozenBadgeEl?.classList.remove('hidden');
+      this.movesEl?.classList.remove('low-moves');
+      this.movesEl?.classList.add('frozen-moves');
+    } else {
+      this.movesFrozenBadgeEl?.classList.add('hidden');
+      this.movesEl?.classList.remove('frozen-moves');
+      this.movesEl?.classList.toggle('low-moves', moves <= LOW_MOVES_THRESHOLD);
+    }
   }
 
   public updateShuffles(shuffles: number): void {
@@ -92,23 +107,23 @@ export class HUDView implements IHUDView {
     this.shufflesEl?.classList.toggle('low-moves', shuffles <= 0);
   }
 
-  public addScore(amount: number): void {
+  public addScore(amount: number, globalScore?: number, isBonusPhase?: boolean): void {
     this.currentScore += amount;
+    if (globalScore !== undefined) {
+      this.setText(this.globalScoreEl, globalScore.toLocaleString());
+    }
     this.animateScore();
     const progress = Math.min(100, (this.currentScore / this.targetScore) * 100);
     if (this.progressFill) this.progressFill.style.width = `${progress}%`;
-  }
 
-  public showVictory(score: number, level: number, movesSaved?: number): void {
-    if (movesSaved !== undefined) {
-      this.modal.showVictory(score, level, movesSaved);
-    } else {
-      this.modal.showVictory(score, level);
+    const qualified = isBonusPhase ?? (this.currentScore >= this.targetScore);
+    if (qualified) {
+      this.bonusPhaseBadgeEl?.classList.remove('hidden');
+      this.movesFrozenBadgeEl?.classList.remove('hidden');
+      this.movesEl?.classList.remove('low-moves');
+      this.movesEl?.classList.add('frozen-moves');
+      this.progressFill?.classList.add('bonus-phase-glow');
     }
-  }
-
-  public showGameOver(score: number, level: number, reason: GameOverReason): void {
-    this.modal.showGameOver(score, level, reason);
   }
 
   private animateScore(): void {

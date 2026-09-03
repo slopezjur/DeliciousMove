@@ -1,5 +1,5 @@
 import { MatchGroup, Position, SpecialType, TileData } from '../TileTypes.ts';
-import { IMatchRule, MatchEvaluationContext } from './IMatchRule.ts';
+import { IMatchRule, MatchEvaluationContext, IMatchRuleRegistry } from './IMatchRule.ts';
 import { SquareAirplaneRule } from './SquareAirplaneRule.ts';
 
 export function chooseSpawnPos(
@@ -201,7 +201,7 @@ export class NormalMatchRule implements IMatchRule {
   }
 }
 
-export class MatchRuleRegistry {
+export class MatchRuleRegistry implements IMatchRuleRegistry {
   private rules: IMatchRule[] = [];
 
   constructor() {

@@ -61,10 +61,10 @@ export class ShuffleEngine implements IDeadlockResolver {
   }
 
   public hasPossibleMoves(board: Board): boolean {
-    // Any special candy on the board can be directly clicked or swapped without matching colors
+    // Any special candy on the board can be directly clicked or swapped without matching colors (rocks are obstacles)
     let hasSpecial = false;
     board.forEachTile((t) => {
-      if (t.special !== SpecialType.None) hasSpecial = true;
+      if (t.special !== SpecialType.None && t.special !== SpecialType.Rock) hasSpecial = true;
     });
     if (hasSpecial) return true;
 
@@ -116,7 +116,14 @@ export class ShuffleEngine implements IDeadlockResolver {
     const tileB = board.get(posB.row, posB.col);
     if (!tileA || !tileB) return false;
 
-    if (tileA.special !== SpecialType.None || tileB.special !== SpecialType.None) {
+    // Rocks are completely static and can NEVER be swapped with anything
+    if (tileA.special === SpecialType.Rock || tileB.special === SpecialType.Rock) {
+      return false;
+    }
+
+    const hasSpecialA = tileA.special !== SpecialType.None;
+    const hasSpecialB = tileB.special !== SpecialType.None;
+    if (hasSpecialA || hasSpecialB) {
       return true;
     }
 

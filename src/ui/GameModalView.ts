@@ -18,6 +18,8 @@ export class GameModalView implements IGameModalView {
   private modalEl: HTMLElement | null;
   private modalTitle: HTMLElement | null;
   private modalScore: HTMLElement | null;
+  private modalGlobalContainer: HTMLElement | null;
+  private modalGlobalScore: HTMLElement | null;
   private modalDetail: HTMLElement | null;
   private modalBtn: HTMLElement | null;
   private soundService: ISoundService;
@@ -31,6 +33,8 @@ export class GameModalView implements IGameModalView {
     this.modalEl = this.findElement('game-modal');
     this.modalTitle = this.findElement('modal-title');
     this.modalScore = this.findElement('modal-final-score');
+    this.modalGlobalContainer = this.findElement('modal-global-container');
+    this.modalGlobalScore = this.findElement('modal-global-score');
     this.modalDetail = this.findElement('modal-detail');
     this.modalBtn = this.findElement('modal-action-btn');
 
@@ -42,7 +46,7 @@ export class GameModalView implements IGameModalView {
     }
   }
 
-  public showVictory(score: number, level: number, movesSaved: number = 0): void {
+  public showVictory(score: number, level: number, movesSaved: number = 0, globalScore?: number): void {
     this.soundService.playVictory();
     const savedMsg = movesSaved > 0
       ? `🎉 ${movesSaved} unused moves banked for Level ${level + 1}!`
@@ -51,6 +55,7 @@ export class GameModalView implements IGameModalView {
       title: '🎉 Sweet Victory!',
       detail: `Level ${level} cleared. ${savedMsg}`,
       score,
+      globalScore,
       buttonLabel: 'Next Level →',
     });
   }
@@ -69,10 +74,26 @@ export class GameModalView implements IGameModalView {
     if (this.modalEl) this.modalEl.classList.add('hidden');
   }
 
-  private render(view: { title: string; detail: string; score: number; buttonLabel: string }): void {
+  private render(view: {
+    title: string;
+    detail: string;
+    score: number;
+    globalScore?: number;
+    buttonLabel: string;
+  }): void {
     if (this.modalTitle) this.modalTitle.textContent = view.title;
     if (this.modalDetail) this.modalDetail.textContent = view.detail;
     if (this.modalScore) this.modalScore.textContent = view.score.toLocaleString();
+
+    if (this.modalGlobalContainer && this.modalGlobalScore) {
+      if (view.globalScore !== undefined && view.globalScore > 0) {
+        this.modalGlobalScore.textContent = view.globalScore.toLocaleString();
+        this.modalGlobalContainer.classList.remove('hidden');
+      } else {
+        this.modalGlobalContainer.classList.add('hidden');
+      }
+    }
+
     if (this.modalBtn) this.modalBtn.textContent = view.buttonLabel;
     if (this.modalEl) this.modalEl.classList.remove('hidden');
   }

@@ -80,7 +80,7 @@ describe('SOLID Refactoring Unit Tests', () => {
   });
 
   describe('GameSession State Machine (SRP)', () => {
-    it('manages moves and transitions to Victory when score reaches target', () => {
+    it('manages moves, enters bonus phase with frozen moves when score reaches target, and transitions to Victory when concluded', () => {
       const session = sessionWith(5, 1000);
       let stateLog: GameState[] = [];
       session.addListener({
@@ -94,8 +94,17 @@ describe('SOLID Refactoring Unit Tests', () => {
 
       session.addPoints(1200);
       expect(session.getScore()).toBe(1200);
+      expect(session.isTargetReached()).toBe(true);
 
-      const finalState = session.onTurnCompleted();
+      const turnState = session.onTurnCompleted();
+      expect(turnState).toBe(GameState.Ready);
+      expect(session.canMakeMove()).toBe(true);
+
+      // Moves are frozen in bonus overtime
+      session.onMoveInitiated();
+      expect(session.getMovesLeft()).toBe(4); // Frozen!
+
+      const finalState = session.completeWithVictory();
       expect(finalState).toBe(GameState.Victory);
       expect(session.canMakeMove()).toBe(false);
     });

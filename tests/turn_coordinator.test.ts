@@ -172,12 +172,17 @@ describe('TurnCoordinator', () => {
   });
 
   describe('infinite mode', () => {
-    it('reaches Victory when the level target is met, then ladders up', async () => {
+    it('reaches Victory when the level target is met and 0 possible moves remain, then ladders up', async () => {
       const board = boardWithPendingMatch();
       const session = new GameSession(new FixedProgression({ moves: 10, targetScore: 100, shuffles: 3 }));
       session.startLevel(1);
 
-      const { coordinator } = makeCoordinator({ board, session });
+      // In bonus phase, victory triggers when 0 possible moves remain on the board
+      const { coordinator } = makeCoordinator({
+        board,
+        session,
+        deadlockResolver: new StubDeadlockResolver(true),
+      });
       await coordinator.playMove(...MATCH_SWAP);
 
       expect(session.getState()).toBe(GameState.Victory);
@@ -186,6 +191,27 @@ describe('TurnCoordinator', () => {
       session.advanceLevel();
       expect(session.getLevel()).toBe(2);
       expect(session.canMakeMove()).toBe(true);
+    });
+
+    it('freezes moves and continues bonus play when target is met and moves still remain', async () => {
+      const board = boardWithPendingMatch();
+      const session = new GameSession(new FixedProgression({ moves: 10, targetScore: 100, shuffles: 3 }));
+      session.startLevel(1);
+
+      const { coordinator } = makeCoordinator({
+        board,
+        session,
+        deadlockResolver: new StubDeadlockResolver(false),
+      });
+      await coordinator.playMove(...MATCH_SWAP);
+
+      expect(session.isTargetReached()).toBe(true);
+      expect(session.getState()).toBe(GameState.Ready);
+      expect(session.getMovesLeft()).toBe(9); // 10 - 1 = 9 from the qualifying move
+
+      // Subsequent moves during bonus phase do NOT decrement moves
+      session.onMoveInitiated();
+      expect(session.getMovesLeft()).toBe(9); // Frozen!
     });
 
     it('alternates difficulty and escalates cycle-over-cycle targets across many levels with the real progression', () => {

@@ -2,7 +2,7 @@ import { Board } from './core/Board.ts';
 import { ICascadeResolver } from './core/CascadeResolver.ts';
 import { IDeadlockResolver } from './core/ShuffleEngine.ts';
 import { IGameSession } from './core/GameSession.ts';
-import { Position } from './core/TileTypes.ts';
+import { Position, SpecialType } from './core/TileTypes.ts';
 import { IAnimationSequencer } from './view/IAnimationSequencer.ts';
 import { IBoardViewAnimator } from './view/IBoardViewContracts.ts';
 import { IGameTelemetryService } from './core/telemetry/IGameTelemetry.ts';
@@ -56,6 +56,18 @@ export class TurnCoordinator implements ITurnCoordinator {
     const tileB = this.board.get(to.row, to.col);
     if (!tileA || !tileB) return false;
 
+    // Rocks are completely static obstacles: swapping with a rock is forbidden
+    if (tileA.special === SpecialType.Rock || tileB.special === SpecialType.Rock) {
+      const spriteA = this.boardView.getTileSprite(tileA.id);
+      const spriteB = this.boardView.getTileSprite(tileB.id);
+      const candySprite = tileA.special === SpecialType.Rock ? spriteB : spriteA;
+      if (candySprite && this.animations.animateForbiddenMove) {
+        await this.animations.animateForbiddenMove(candySprite);
+      }
+      this.telemetry?.recordSwap(from, to, false, 0, 0);
+      return false;
+    }
+
     const spriteA = this.boardView.getTileSprite(tileA.id);
     const spriteB = this.boardView.getTileSprite(tileB.id);
     if (!spriteA || !spriteB) return false;
@@ -63,7 +75,8 @@ export class TurnCoordinator implements ITurnCoordinator {
     // 1. Show the swap before the model commits to it.
     await this.animations.animateSwap(spriteA, spriteB, from, to);
 
-    const result = this.cascadeResolver.resolveSwap(this.board, from, to);
+    const avoidMatches = this.session.isTargetReached();
+    const result = this.cascadeResolver.resolveSwap(this.board, from, to, avoidMatches);
     if (!result.valid) {
       await this.animations.animateSwap(spriteA, spriteB, to, from);
       this.telemetry?.recordSwap(from, to, false, 0, 0);
@@ -94,10 +107,11 @@ export class TurnCoordinator implements ITurnCoordinator {
     if (!this.session.canMakeMove()) return false;
 
     const tile = this.board.get(pos.row, pos.col);
-    if (!tile) return false;
+    if (!tile || tile.special === SpecialType.None || tile.special === SpecialType.Rock) return false;
 
     const spec = tile.special;
-    const result = this.cascadeResolver.resolveActivation(this.board, pos);
+    const avoidMatches = this.session.isTargetReached();
+    const result = this.cascadeResolver.resolveActivation(this.board, pos, avoidMatches);
     if (!result.valid) return false;
 
     const scoreBefore = this.session.getScore();
@@ -116,9 +130,15 @@ export class TurnCoordinator implements ITurnCoordinator {
   /**
    * Rescues a jammed board while the level still has reshuffles. Once the budget is
    * spent — or the scrambler cannot find a solvable arrangement — the run is over.
+   * In bonus phase (target already reached), reaching 0 moves concludes the level with Victory!
    */
   private async settleDeadlocks(): Promise<void> {
     if (this.deadlockResolver.hasPossibleMoves(this.board)) return;
+
+    if (this.session.isTargetReached()) {
+      this.session.completeWithVictory();
+      return;
+    }
 
     if (!this.session.consumeShuffle()) {
       this.session.endWithDeadlock();

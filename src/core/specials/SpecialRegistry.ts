@@ -4,6 +4,7 @@ import { IRandomSource, MathRandomSource } from '../random/IRandomSource.ts';
 import {
   ISpecialEffectHandler,
   ISpecialComboHandler,
+  ISpecialRegistry,
   SpecialDetonationContext,
   SpecialTriggerEffect,
 } from './ISpecialHandler.ts';
@@ -15,6 +16,7 @@ const isStriped = (s: SpecialType) => s === SpecialType.StripedHorizontal || s =
  * chained detonation. Shared by every effect handler (DRY).
  */
 function consumeTile(tile: TileData, context: SpecialDetonationContext, affected: number[]): void {
+  if (tile.special === SpecialType.Rock) return; // Rocks are unbreakable obstacles
   affected.push(tile.id);
   context.destroyedTileIds.add(tile.id);
   if (tile.special !== SpecialType.None && tile.id !== context.sourceTile.id) {
@@ -141,6 +143,7 @@ export class AirplaneHandler implements ISpecialEffectHandler {
 
     board.forEachTile((t) => {
       if (t.id === sourceTile.id || destroyedTileIds.has(t.id)) return;
+      if (t.special === SpecialType.Rock) return; // Rocks are unbreakable and never targeted
       if (t.special !== SpecialType.None) {
         specialCandidates.push(t);
       } else {
@@ -172,7 +175,9 @@ export class DoubleColorBombComboHandler implements ISpecialComboHandler {
   public execute(board: Board, a: TileData, b: TileData, destroyed: Set<number>) {
     destroyed.add(a.id);
     destroyed.add(b.id);
-    board.forEachTile((t) => destroyed.add(t.id));
+    board.forEachTile((t) => {
+      if (t.special !== SpecialType.Rock) destroyed.add(t.id);
+    });
     return {
       effects: [
         {
@@ -322,7 +327,7 @@ export class DoubleAirplaneComboHandler implements ISpecialComboHandler {
     for (const source of [a, b]) {
       for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
         const n = board.get(source.row + dr, source.col + dc);
-        if (n && !destroyed.has(n.id)) {
+        if (n && n.special !== SpecialType.Rock && !destroyed.has(n.id)) {
           destroyed.add(n.id);
           affected.push(n.id);
           if (n.special !== SpecialType.None) secondary.push(n);
@@ -333,7 +338,7 @@ export class DoubleAirplaneComboHandler implements ISpecialComboHandler {
     // Pick 3 distinct targets across the board
     const candidates: TileData[] = [];
     board.forEachTile((t) => {
-      if (!destroyed.has(t.id)) candidates.push(t);
+      if (t.special !== SpecialType.Rock && !destroyed.has(t.id)) candidates.push(t);
     });
 
     const targets: (Position & { id: number })[] = [];
@@ -387,7 +392,7 @@ export class AirplaneStripedComboHandler implements ISpecialComboHandler {
 
     const candidates: TileData[] = [];
     board.forEachTile((t) => {
-      if (!destroyed.has(t.id)) candidates.push(t);
+      if (t.special !== SpecialType.Rock && !destroyed.has(t.id)) candidates.push(t);
     });
 
     let target: TileData | undefined;
@@ -399,7 +404,7 @@ export class AirplaneStripedComboHandler implements ISpecialComboHandler {
       // Cross laser beam at target!
       for (let c = 0; c < board.cols; c++) {
         const t = board.get(target.row, c);
-        if (t && !destroyed.has(t.id)) {
+        if (t && t.special !== SpecialType.Rock && !destroyed.has(t.id)) {
           destroyed.add(t.id);
           affected.push(t.id);
           if (t.special !== SpecialType.None) secondary.push(t);
@@ -407,7 +412,7 @@ export class AirplaneStripedComboHandler implements ISpecialComboHandler {
       }
       for (let r = 0; r < board.rows; r++) {
         const t = board.get(r, target.col);
-        if (t && !destroyed.has(t.id)) {
+        if (t && t.special !== SpecialType.Rock && !destroyed.has(t.id)) {
           destroyed.add(t.id);
           affected.push(t.id);
           if (t.special !== SpecialType.None) secondary.push(t);
@@ -455,7 +460,7 @@ export class AirplaneWrappedComboHandler implements ISpecialComboHandler {
 
     const candidates: TileData[] = [];
     board.forEachTile((t) => {
-      if (!destroyed.has(t.id)) candidates.push(t);
+      if (t.special !== SpecialType.Rock && !destroyed.has(t.id)) candidates.push(t);
     });
 
     let target: TileData | undefined;
@@ -468,7 +473,7 @@ export class AirplaneWrappedComboHandler implements ISpecialComboHandler {
       for (let r = target.row - 1; r <= target.row + 1; r++) {
         for (let c = target.col - 1; c <= target.col + 1; c++) {
           const t = board.get(r, c);
-          if (t && !destroyed.has(t.id)) {
+          if (t && t.special !== SpecialType.Rock && !destroyed.has(t.id)) {
             destroyed.add(t.id);
             affected.push(t.id);
             if (t.special !== SpecialType.None) secondary.push(t);
@@ -502,7 +507,7 @@ function destroyAndCollect(
   excludeB: number
 ): void {
   const t = board.get(r, c);
-  if (!t || destroyed.has(t.id)) return;
+  if (!t || t.special === SpecialType.Rock || destroyed.has(t.id)) return;
   destroyed.add(t.id);
   affected.push(t.id);
   if (t.special !== SpecialType.None && t.id !== excludeA && t.id !== excludeB) {
@@ -592,7 +597,7 @@ export class GiantWrappedComboHandler implements ISpecialComboHandler {
   }
 }
 
-export class SpecialRegistry {
+export class SpecialRegistry implements ISpecialRegistry {
   private effectHandlers = new Map<SpecialType, ISpecialEffectHandler>();
   private comboHandlers: ISpecialComboHandler[] = [];
 

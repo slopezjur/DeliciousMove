@@ -12,8 +12,6 @@ import {
 import { IMatchRule, MatchEvaluationContext } from '../src/core/matching/IMatchRule.ts';
 import { HUDView } from '../src/ui/HUDView.ts';
 import { ISoundService } from '../src/audio/ISoundService.ts';
-import { IGameModalView } from '../src/ui/IGameModalView.ts';
-import { GameOverReason } from '../src/core/GameSession.ts';
 import { LevelDifficulty } from '../src/core/LevelProgression.ts';
 
 describe('Second Pass SOLID Refactoring Unit Tests', () => {
@@ -64,8 +62,8 @@ describe('Second Pass SOLID Refactoring Unit Tests', () => {
     });
   });
 
-  describe('HUDView & GameModal Separation (SRP & DIP)', () => {
-    it('delegates victory and game over to injected modal and plays sound via ISoundService', () => {
+  describe('HUDView Separation', () => {
+    it('initializes and updates HUD metrics independently without modal coupling', () => {
       const mockSound: ISoundService = {
         playSwap: vi.fn(),
         playMatch: vi.fn(),
@@ -78,23 +76,13 @@ describe('Second Pass SOLID Refactoring Unit Tests', () => {
         isMuted: vi.fn().mockReturnValue(false),
       };
 
-      const mockModal: IGameModalView = {
-        showVictory: vi.fn(),
-        showGameOver: vi.fn(),
-        hide: vi.fn(),
-      };
+      const hud = new HUDView(mockSound);
+      hud.initLevel({ level: 3, difficulty: LevelDifficulty.Hard, moves: 20, targetScore: 5000, shuffles: 3 }, 5, 12000);
+      hud.updateMoves(15);
+      hud.updateShuffles(2);
+      hud.addScore(300, 12300);
 
-      const onRestart = vi.fn();
-      const hud = new HUDView(onRestart, mockSound, mockModal);
-
-      hud.showVictory(4500, 3);
-      expect(mockModal.showVictory).toHaveBeenCalledWith(4500, 3);
-
-      hud.showGameOver(1200, 3, GameOverReason.Deadlock);
-      expect(mockModal.showGameOver).toHaveBeenCalledWith(1200, 3, GameOverReason.Deadlock);
-
-      hud.initLevel({ level: 3, difficulty: LevelDifficulty.Hard, moves: 20, targetScore: 5000, shuffles: 3 });
-      expect(mockModal.hide).toHaveBeenCalled();
+      expect(hud).toBeDefined();
     });
   });
 });

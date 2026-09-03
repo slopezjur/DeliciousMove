@@ -23,6 +23,7 @@ export enum SpecialType {
   Wrapped = 'wrapped',
   ColorBomb = 'color_bomb',
   Airplane = 'airplane',
+  Rock = 'rock',
 }
 
 export interface Position {

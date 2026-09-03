@@ -25,6 +25,7 @@ export interface IBoardCoordinateMapper {
   localToGrid(localX: number, localY: number): Position | null;
   setTileSelected(pos: Position, selected: boolean): void;
   isSpecialTile(pos: Position): boolean;
+  isRock(pos: Position): boolean;
   isValidPosition(pos: Position): boolean;
   isAdjacent(posA: Position, posB: Position): boolean;
 }

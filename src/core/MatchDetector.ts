@@ -1,6 +1,7 @@
 import { Board } from './Board.ts';
-import { TileData, TileColor, Position, MatchGroup } from './TileTypes.ts';
+import { TileData, TileColor, Position, MatchGroup, SpecialType } from './TileTypes.ts';
 import { MatchRuleRegistry } from './matching/MatchRuleRegistry.ts';
+import { IMatchRuleRegistry } from './matching/IMatchRule.ts';
 
 export interface RawRun {
   orientation: 'horizontal' | 'vertical';
@@ -14,9 +15,9 @@ export interface IMatchDetector {
 }
 
 export class MatchDetector implements IMatchDetector {
-  private readonly registry: MatchRuleRegistry;
+  private readonly registry: IMatchRuleRegistry;
 
-  constructor(registry: MatchRuleRegistry = new MatchRuleRegistry()) {
+  constructor(registry: IMatchRuleRegistry = new MatchRuleRegistry()) {
     this.registry = registry;
   }
 
@@ -86,7 +87,7 @@ export class MatchDetector implements IMatchDetector {
       for (let cell = 0; cell < cellCount; cell++) {
         const tile = isHorizontal ? board.get(line, cell) : board.get(cell, line);
 
-        if (!tile) {
+        if (!tile || tile.special === SpecialType.Rock) {
           flush();
           currentRun = [];
           continue;

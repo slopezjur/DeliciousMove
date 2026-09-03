@@ -20,6 +20,8 @@ import { IAnimationSequencer } from './view/IAnimationSequencer.ts';
 import { InputController, IInputController } from './input/InputController.ts';
 import { HUDView } from './ui/HUDView.ts';
 import { IHUDView } from './ui/IHUDView.ts';
+import { GameModalView } from './ui/GameModalView.ts';
+import { IGameModalView } from './ui/IGameModalView.ts';
 import { TurnCoordinator, ITurnCoordinator } from './TurnCoordinator.ts';
 import { IGameTelemetryService } from './core/telemetry/IGameTelemetry.ts';
 import { GameTelemetryService } from './core/telemetry/GameTelemetryService.ts';
@@ -27,6 +29,8 @@ import { DebugOverlayView } from './ui/DebugOverlayView.ts';
 import { IDebugOverlayView } from './ui/IDebugOverlayView.ts';
 import { IClipboardService } from './ui/IClipboardService.ts';
 import { BrowserClipboardService } from './ui/ClipboardService.ts';
+import { IdleHintController } from './input/IdleHintController.ts';
+import { IIdleHintController } from './input/IIdleHintController.ts';
 
 const HUD_HEIGHT = 90;
 const END_OF_TURN_MODAL_DELAY_MS = 400;
@@ -39,11 +43,13 @@ export interface GameDependencies {
   boardView?: IBoardView;
   animationQueue?: IAnimationSequencer;
   inputController?: IInputController;
+  idleHintController?: IIdleHintController;
   cascadeResolver?: ICascadeResolver;
   deadlockResolver?: IDeadlockResolver;
   session?: IGameSession;
   turnCoordinator?: ITurnCoordinator;
   hud?: IHUDView;
+  modal?: IGameModalView;
   telemetry?: IGameTelemetryService;
   debugOverlay?: IDebugOverlayView;
   clipboardService?: IClipboardService;
@@ -59,9 +65,11 @@ export class Game {
   private readonly boardInitializer: IBoardInitializer;
   private readonly boardView: IBoardView;
   private readonly inputController: IInputController;
+  private readonly idleHintController: IIdleHintController;
   private readonly deadlockResolver: IDeadlockResolver;
   private readonly session: IGameSession;
   private readonly hud: IHUDView;
+  private readonly modal: IGameModalView;
   private readonly turnCoordinator: ITurnCoordinator;
   private readonly telemetry: IGameTelemetryService;
   private readonly debugOverlay?: IDebugOverlayView;
@@ -74,17 +82,31 @@ export class Game {
     this.boardInitializer = deps.boardInitializer ?? new BoardInitializer(random);
     this.boardView = deps.boardView ?? new BoardView(this.board);
     this.session = deps.session ?? new GameSession(new InfiniteLevelProgression());
-    this.hud = deps.hud ?? new HUDView(this.onModalAction.bind(this));
+    this.modal = deps.modal ?? new GameModalView(this.onModalAction.bind(this));
+    this.hud = deps.hud ?? new HUDView();
 
     this.deadlockResolver =
       deps.deadlockResolver ?? new ShuffleEngine(new MatchDetector(), random);
+
+    const animations = deps.animationQueue ?? new AnimationQueue(this.boardView);
+
+    this.idleHintController =
+      deps.idleHintController ??
+      new IdleHintController(
+        this.board,
+        this.boardView,
+        this.deadlockResolver,
+        this.session,
+        animations
+      );
 
     this.inputController =
       deps.inputController ??
       new InputController(
         this.boardView,
         this.onSwapMove.bind(this),
-        this.onActivateTile.bind(this)
+        this.onActivateTile.bind(this),
+        () => this.idleHintController.resetTimer()
       );
 
     this.telemetry =
@@ -95,8 +117,6 @@ export class Game {
         deadlockResolver: this.deadlockResolver,
         inputController: this.inputController,
       });
-
-    const animations = deps.animationQueue ?? new AnimationQueue(this.boardView);
     const cascadeResolver =
       deps.cascadeResolver ??
       new CascadeResolver(
@@ -208,31 +228,35 @@ export class Game {
     this.session.addListener({
       onLevelStarted: (config) => {
         this.telemetry.recordStateTransition('level_start', `Level ${config.level} (${config.difficulty})`);
-        this.hud.initLevel(config, this.session.getAccumulatedMoves());
+        this.modal.hide();
+        this.hud.initLevel(config, this.session.getAccumulatedMoves(), this.session.getGlobalScore());
         this.buildPlayableBoard();
         this.debugOverlay?.refresh();
+        this.idleHintController.start();
       },
-      onScoreUpdated: (_score, added) => {
-        if (added > 0) this.hud.addScore(added);
+      onScoreUpdated: (_score, added, globalScore, isBonusPhase) => {
+        if (added > 0) this.hud.addScore(added, globalScore, isBonusPhase);
       },
-      onMovesUpdated: (moves) => this.hud.updateMoves(moves),
+      onMovesUpdated: (moves, isFrozen) => this.hud.updateMoves(moves, isFrozen),
       onShufflesUpdated: (shuffles) => this.hud.updateShuffles(shuffles),
       onStateChanged: (state, snapshot) => {
         if (state === GameState.Victory) {
+          this.idleHintController.stop();
           this.telemetry.recordStateTransition('victory', `Score: ${snapshot.score}`);
           this.debugOverlay?.refresh();
           this.inputController.setLocked(true);
           setTimeout(
-            () => this.hud.showVictory(snapshot.score, snapshot.level, snapshot.movesLeft),
+            () => this.modal.showVictory(snapshot.score, snapshot.level, snapshot.movesLeft, snapshot.globalScore),
             END_OF_TURN_MODAL_DELAY_MS
           );
         } else if (state === GameState.GameOver) {
+          this.idleHintController.stop();
           this.telemetry.recordStateTransition('game_over', `Reason: ${snapshot.reason}`);
           this.debugOverlay?.refresh();
           this.inputController.setLocked(true);
           setTimeout(
             () =>
-              this.hud.showGameOver(
+              this.modal.showGameOver(
                 snapshot.score,
                 snapshot.level,
                 snapshot.reason ?? this.session.getGameOverReason()!
@@ -286,6 +310,7 @@ export class Game {
     this.debugOverlay?.refresh();
     // The turn may have ended the run, in which case the board stays locked.
     this.inputController.setLocked(!this.session.canMakeMove());
+    this.idleHintController.resetTimer();
     return played;
   }
 
@@ -293,6 +318,7 @@ export class Game {
     const activated = await this.turnCoordinator.activateTile(pos);
     this.debugOverlay?.refresh();
     this.inputController.setLocked(!this.session.canMakeMove());
+    this.idleHintController.resetTimer();
     return activated;
   }
 }

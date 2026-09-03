@@ -14,4 +14,6 @@ export interface IAnimationSequencer {
   ): Promise<void>;
   playCascadeSteps(steps: CascadeStep[], onScoreGained: (score: number) => void): Promise<void>;
   animateShuffle(tileMappings: Map<number, Position>): Promise<void>;
+  animateHint?(sprites: TileSprite[]): void;
+  animateForbiddenMove?(sprite: TileSprite): Promise<void>;
 }

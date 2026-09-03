@@ -29,8 +29,8 @@ interface SpawnTargetSelection {
 }
 
 export interface ICascadeResolver {
-  resolveSwap(board: Board, posA: Position, posB: Position): SwapResult;
-  resolveActivation(board: Board, pos: Position): SwapResult;
+  resolveSwap(board: Board, posA: Position, posB: Position, avoidMatches?: boolean): SwapResult;
+  resolveActivation(board: Board, pos: Position, avoidMatches?: boolean): SwapResult;
 }
 
 export class CascadeResolver implements ICascadeResolver {
@@ -57,9 +57,9 @@ export class CascadeResolver implements ICascadeResolver {
   /**
    * Direct detonation of a clicked special candy.
    */
-  public resolveActivation(board: Board, pos: Position): SwapResult {
+  public resolveActivation(board: Board, pos: Position, avoidMatches = false): SwapResult {
     const tile = board.get(pos.row, pos.col);
-    if (!tile || tile.special === SpecialType.None) {
+    if (!tile || tile.special === SpecialType.None || tile.special === SpecialType.Rock) {
       return { valid: false, steps: [] };
     }
 
@@ -69,9 +69,9 @@ export class CascadeResolver implements ICascadeResolver {
 
     const steps: CascadeStep[] = [];
     steps.push(
-      this.executeDestroyAndCollapse(board, destroyedTileIds, [], [], effects, 1)
+      this.executeDestroyAndCollapse(board, destroyedTileIds, [], [], effects, 1, avoidMatches)
     );
-    this.continueCascades(board, steps, 2);
+    this.continueCascades(board, steps, 2, avoidMatches);
     return { valid: true, steps };
   }
 
@@ -79,12 +79,19 @@ export class CascadeResolver implements ICascadeResolver {
    * Evaluates a player move between two positions.
    * If valid, returns the full sequence of cascade steps to animate.
    */
-  public resolveSwap(board: Board, posA: Position, posB: Position): SwapResult {
+  public resolveSwap(board: Board, posA: Position, posB: Position, avoidMatches = false): SwapResult {
     if (!board.isAdjacent(posA, posB)) {
       return { valid: false, steps: [] };
     }
 
-    if (!board.get(posA.row, posA.col) || !board.get(posB.row, posB.col)) {
+    const tileA = board.get(posA.row, posA.col);
+    const tileB = board.get(posB.row, posB.col);
+    if (!tileA || !tileB) {
+      return { valid: false, steps: [] };
+    }
+
+    // Rocks are completely static obstacles: swaps involving rocks are invalid at the model level
+    if (tileA.special === SpecialType.Rock || tileB.special === SpecialType.Rock) {
       return { valid: false, steps: [] };
     }
 
@@ -97,15 +104,15 @@ export class CascadeResolver implements ICascadeResolver {
     if (specialCombo.executed) {
       const steps: CascadeStep[] = [];
       steps.push(
-        this.executeDestroyAndCollapse(board, specialCombo.destroyedTileIds, [], [], specialCombo.effects, 1)
+        this.executeDestroyAndCollapse(board, specialCombo.destroyedTileIds, [], [], specialCombo.effects, 1, avoidMatches)
       );
-      this.continueCascades(board, steps, 2);
+      this.continueCascades(board, steps, 2, avoidMatches);
       return { valid: true, steps };
     }
 
-    const tileA = board.get(posA.row, posA.col)!;
-    const tileB = board.get(posB.row, posB.col)!;
-    const hasSpecialInvolved = tileA.special !== SpecialType.None || tileB.special !== SpecialType.None;
+    const swappedA = board.get(posA.row, posA.col)!;
+    const swappedB = board.get(posB.row, posB.col)!;
+    const hasSpecialInvolved = swappedA.special !== SpecialType.None || swappedB.special !== SpecialType.None;
 
     const matches = this.matchDetector.detectMatches(board, [posA, posB]);
 
@@ -117,44 +124,44 @@ export class CascadeResolver implements ICascadeResolver {
 
     const steps: CascadeStep[] = [];
 
-    // 3. If a special was dragged/swapped without forming a 3-color match, detonate it directly!
+    // 3. Single special swapped with normal candy
     if (hasSpecialInvolved && matches.length === 0) {
+      const specialsToDetonate: TileData[] = [];
+      if (swappedA.special !== SpecialType.None) specialsToDetonate.push(swappedA);
+      if (swappedB.special !== SpecialType.None) specialsToDetonate.push(swappedB);
+
       const destroyedTileIds = new Set<number>();
       const effects: SpecialTriggerEffect[] = [];
-      const specialsToDetonate: TileData[] = [];
-      if (tileA.special !== SpecialType.None) specialsToDetonate.push(tileA);
-      if (tileB.special !== SpecialType.None) specialsToDetonate.push(tileB);
-
       this.specialResolver.detonate(board, [{ specials: specialsToDetonate }], destroyedTileIds, effects);
       steps.push(
-        this.executeDestroyAndCollapse(board, destroyedTileIds, [], [], effects, 1)
+        this.executeDestroyAndCollapse(board, destroyedTileIds, [], [], effects, 1, avoidMatches)
       );
-      this.continueCascades(board, steps, 2);
+      this.continueCascades(board, steps, 2, avoidMatches);
       return { valid: true, steps };
     }
 
     // 4. Otherwise process matches, also including any swapped specials that were not in match groups
     const swappedSpecials: TileData[] = [];
     if (hasSpecialInvolved) {
-      if (tileA.special !== SpecialType.None) swappedSpecials.push(tileA);
-      if (tileB.special !== SpecialType.None) swappedSpecials.push(tileB);
+      if (swappedA.special !== SpecialType.None) swappedSpecials.push(swappedA);
+      if (swappedB.special !== SpecialType.None) swappedSpecials.push(swappedB);
     }
 
-    const step = this.processMatchPass(board, [posA, posB], 1, swappedSpecials);
+    const step = this.processMatchPass(board, [posA, posB], 1, swappedSpecials, avoidMatches);
     if (step) {
       steps.push(step);
-      this.continueCascades(board, steps, 2);
+      this.continueCascades(board, steps, 2, avoidMatches);
     }
 
     return { valid: true, steps };
   }
 
-  private continueCascades(board: Board, steps: CascadeStep[], startMultiplier: number): void {
+  private continueCascades(board: Board, steps: CascadeStep[], startMultiplier: number, avoidMatches = false): void {
     let combo = startMultiplier;
     let iteration = 0;
 
     while (iteration++ < MAX_CASCADE_ITERATIONS) {
-      const step = this.processMatchPass(board, [], combo);
+      const step = this.processMatchPass(board, [], combo, [], avoidMatches);
       if (!step) break;
       steps.push(step);
       combo++;
@@ -165,7 +172,8 @@ export class CascadeResolver implements ICascadeResolver {
     board: Board,
     interactionPositions: Position[],
     multiplier: number,
-    additionalSpecials: TileData[] = []
+    additionalSpecials: TileData[] = [],
+    avoidMatches = false
   ): CascadeStep | null {
     const matchGroups = this.matchDetector.detectMatches(board, interactionPositions);
     if (matchGroups.length === 0 && additionalSpecials.length === 0) return null;
@@ -236,7 +244,8 @@ export class CascadeResolver implements ICascadeResolver {
       spawnedSpecials,
       evolutions,
       triggeredEffects,
-      multiplier
+      multiplier,
+      avoidMatches
     );
   }
 
@@ -249,7 +258,8 @@ export class CascadeResolver implements ICascadeResolver {
     spawnedSpecials: TileData[],
     evolutions: SpecialEvolution[],
     triggeredEffects: SpecialTriggerEffect[],
-    multiplier: number
+    multiplier: number,
+    avoidMatches = false
   ): CascadeStep {
     // 1. Clear destroyed tiles from the board
     board.forEachTile((t, r, c) => {
@@ -259,7 +269,7 @@ export class CascadeResolver implements ICascadeResolver {
     });
 
     const drops = this.gravitySystem.applyGravity(board);
-    const spawns = this.tileSpawner.refillEmptySlots(board);
+    const spawns = this.tileSpawner.refillEmptySlots(board, avoidMatches);
     const scoreGained = this.scoreCalculator.calculateStepScore(destroyedIds.size, multiplier);
 
     return {

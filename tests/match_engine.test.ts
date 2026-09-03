@@ -6,6 +6,7 @@ import { CascadeResolver } from '../src/core/CascadeResolver.ts';
 import { ShuffleEngine } from '../src/core/ShuffleEngine.ts';
 import { SeededRandomSource } from '../src/core/random/IRandomSource.ts';
 import { TileColor, SpecialType } from '../src/core/TileTypes.ts';
+import { TileSpawner } from '../src/core/TileSpawner.ts';
 
 describe('Match-3 Core Engine', () => {
   let board: Board;
@@ -174,5 +175,36 @@ describe('Match-3 Core Engine', () => {
     expect(evo.sourceTileIds.length).toBe(3);
     // Evolved special ID must NOT be in matchedTileIds (destroyed list)
     expect(firstStep.matchedTileIds).not.toContain(evo.specialTile.id);
+  });
+
+  it('spawns inert tiles with avoidMatches that do not create new 3-in-a-row matches', () => {
+    // Fill board with checkerboard
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        board.createTile(r, c, (r + c) % 2 === 0 ? TileColor.Red : TileColor.Blue);
+      }
+    }
+
+    // Clear the top two rows
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 8; c++) {
+        board.set(r, c, null);
+      }
+    }
+
+    const spawner = new TileSpawner();
+    const spawns = spawner.refillEmptySlots(board, true);
+
+    expect(spawns.length).toBe(16);
+    // Every slot should be filled
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        expect(board.get(r, c)).not.toBeNull();
+      }
+    }
+
+    // No newly created 3-in-a-row matches
+    const matches = matchDetector.detectMatches(board);
+    expect(matches.length).toBe(0);
   });
 });

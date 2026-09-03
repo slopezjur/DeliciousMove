@@ -460,6 +460,55 @@ export class AnimationQueue implements IAnimationSequencer {
     });
   }
 
+  public animateHint(sprites: TileSprite[]): void {
+    sprites.forEach((sprite) => {
+      gsap.killTweensOf(sprite);
+      gsap.killTweensOf(sprite.scale);
+      const startX = sprite.x;
+      const tl = gsap.timeline({
+        onComplete: () => {
+          sprite.x = startX;
+          sprite.rotation = 0;
+          sprite.scale.set(1, 1);
+        },
+      });
+      tl.to(sprite.scale, { x: 1.14, y: 1.14, duration: 0.14, yoyo: true, repeat: 1 }, 0)
+        .to(sprite, { x: startX - 5, rotation: -0.1, duration: 0.08, ease: 'power1.inOut' }, 0)
+        .to(sprite, { x: startX + 5, rotation: 0.1, duration: 0.08, ease: 'power1.inOut' })
+        .to(sprite, { x: startX - 3, rotation: -0.06, duration: 0.08, ease: 'power1.inOut' })
+        .to(sprite, { x: startX + 3, rotation: 0.06, duration: 0.08, ease: 'power1.inOut' })
+        .to(sprite, { x: startX, rotation: 0, duration: 0.07, ease: 'power1.out' });
+    });
+  }
+
+  public animateForbiddenMove(sprite: TileSprite): Promise<void> {
+    return new Promise((resolve) => {
+      gsap.killTweensOf(sprite);
+      gsap.killTweensOf(sprite.scale);
+      const startX = sprite.x;
+
+      const originalTint = sprite.graphic.tint;
+      sprite.graphic.tint = 0xff3b30;
+
+      const tl = gsap.timeline({
+        onComplete: () => {
+          sprite.x = startX;
+          sprite.rotation = 0;
+          sprite.graphic.tint = originalTint;
+          resolve();
+        },
+      });
+
+      tl.to(sprite, { x: startX - 8, rotation: -0.06, duration: 0.04, ease: 'power1.inOut' })
+        .to(sprite, { x: startX + 8, rotation: 0.06, duration: 0.04, ease: 'power1.inOut' })
+        .to(sprite, { x: startX - 6, rotation: -0.04, duration: 0.04, ease: 'power1.inOut' })
+        .to(sprite, { x: startX + 6, rotation: 0.04, duration: 0.04, ease: 'power1.inOut' })
+        .to(sprite, { x: startX - 3, rotation: -0.02, duration: 0.04, ease: 'power1.inOut' })
+        .to(sprite, { x: startX + 3, rotation: 0.02, duration: 0.04, ease: 'power1.inOut' })
+        .to(sprite, { x: startX, rotation: 0, duration: 0.04, ease: 'power1.out' });
+    });
+  }
+
   /** Local pixel centre of the board, independent of grid dimensions. */
   private getBoardCenter(): { x: number; y: number } {
     return {

@@ -27,12 +27,15 @@ export interface SessionSnapshot {
   accumulatedMoves?: number;
   difficulty?: LevelDifficulty;
   reason?: GameOverReason;
+  globalScore?: number;
+  isBonusPhase?: boolean;
+  isTargetReached?: boolean;
 }
 
 export interface GameSessionListener {
   onLevelStarted?: (config: LevelConfig) => void;
-  onScoreUpdated?: (currentScore: number, added: number) => void;
-  onMovesUpdated?: (movesLeft: number) => void;
+  onScoreUpdated?: (currentScore: number, added: number, globalScore: number, isBonusPhase: boolean) => void;
+  onMovesUpdated?: (movesLeft: number, isFrozen?: boolean) => void;
   onShufflesUpdated?: (shufflesLeft: number) => void;
   onStateChanged?: (newState: GameState, snapshot: SessionSnapshot) => void;
 }
@@ -45,10 +48,14 @@ export interface IGameSession {
   getLevelConfig(): LevelConfig;
   getLevel(): number;
   getScore(): number;
+  getGlobalScore(): number;
   getMovesLeft(): number;
   getShufflesLeft(): number;
   getAccumulatedMoves(): number;
   getTargetScore(): number;
+  isTargetReached(): boolean;
+  isBonusPhase(): boolean;
+  completeWithVictory(): GameState;
   getState(): GameState;
   getGameOverReason(): GameOverReason | undefined;
   getSnapshot(): SessionSnapshot;
@@ -65,6 +72,7 @@ export class GameSession implements IGameSession {
 
   private config: LevelConfig;
   private currentScore: number = 0;
+  private globalScore: number = 0;
   private movesLeft: number;
   private shufflesLeft: number;
   private accumulatedMoves: number = 0;
@@ -86,8 +94,9 @@ export class GameSession implements IGameSession {
     };
   }
 
-  /** Restarts the run from level 1 and resets banked moves. */
+  /** Restarts the run from level 1 and resets banked moves & global score. */
   public restart(): void {
+    this.globalScore = 0;
     this.accumulatedMoves = 0;
     this.startLevel(1, 0);
   }
@@ -125,6 +134,10 @@ export class GameSession implements IGameSession {
     return this.currentScore;
   }
 
+  public getGlobalScore(): number {
+    return this.globalScore;
+  }
+
   public getMovesLeft(): number {
     return this.movesLeft;
   }
@@ -139,6 +152,19 @@ export class GameSession implements IGameSession {
 
   public getTargetScore(): number {
     return this.config.targetScore;
+  }
+
+  public isTargetReached(): boolean {
+    return this.currentScore >= this.config.targetScore;
+  }
+
+  public isBonusPhase(): boolean {
+    return this.isTargetReached() && this.state !== GameState.GameOver && this.state !== GameState.Victory;
+  }
+
+  public completeWithVictory(): GameState {
+    this.setState(GameState.Victory);
+    return this.state;
   }
 
   public getState(): GameState {
@@ -159,23 +185,30 @@ export class GameSession implements IGameSession {
       accumulatedMoves: this.accumulatedMoves,
       difficulty: this.config.difficulty,
       reason: this.gameOverReason,
+      globalScore: this.globalScore,
+      isBonusPhase: this.isBonusPhase(),
+      isTargetReached: this.isTargetReached(),
     };
   }
 
   public canMakeMove(): boolean {
-    return this.state === GameState.Ready && this.movesLeft > 0;
+    return this.state === GameState.Ready && (this.movesLeft > 0 || this.isTargetReached());
   }
 
   public onMoveInitiated(): void {
     if (!this.canMakeMove()) return;
-    this.movesLeft--;
+    // Moves are frozen once the minimum target is achieved so surplus moves are banked for next levels
+    if (!this.isTargetReached()) {
+      this.movesLeft--;
+      this.notifyMoves();
+    }
     this.setState(GameState.Resolving);
-    this.notifyMoves();
   }
 
   public addPoints(points: number): void {
     if (points <= 0) return;
     this.currentScore += points;
+    this.globalScore += points;
     this.notifyScore(points);
   }
 
@@ -198,10 +231,11 @@ export class GameSession implements IGameSession {
   }
 
   public onTurnCompleted(): GameState {
-    if (this.state === GameState.GameOver) return this.state;
+    if (this.state === GameState.GameOver || this.state === GameState.Victory) return this.state;
 
-    if (this.currentScore >= this.config.targetScore) {
-      this.setState(GameState.Victory);
+    if (this.isTargetReached()) {
+      // Reaching the minimum target unlocks the bonus overtime phase; we remain ready until 0 possible moves remain
+      this.setState(GameState.Ready);
     } else if (this.movesLeft <= 0) {
       this.gameOverReason = GameOverReason.OutOfMoves;
       this.setState(GameState.GameOver);
@@ -218,11 +252,20 @@ export class GameSession implements IGameSession {
   }
 
   private notifyScore(added: number): void {
-    this.listeners.forEach((l) => l.onScoreUpdated?.(this.currentScore, added));
+    this.listeners.forEach((l) =>
+      l.onScoreUpdated?.(this.currentScore, added, this.globalScore, this.isBonusPhase())
+    );
   }
 
   private notifyMoves(): void {
-    this.listeners.forEach((l) => l.onMovesUpdated?.(this.movesLeft));
+    const isFrozen = this.isTargetReached();
+    this.listeners.forEach((l) => {
+      if (isFrozen) {
+        l.onMovesUpdated?.(this.movesLeft, true);
+      } else {
+        l.onMovesUpdated?.(this.movesLeft);
+      }
+    });
   }
 
   private notifyShuffles(): void {

@@ -18,6 +18,8 @@ export class AssetFactory {
 
     if (special === SpecialType.ColorBomb) {
       this.drawColorBomb(ctx);
+    } else if (special === SpecialType.Rock) {
+      this.drawRock(ctx);
     } else {
       this.drawCandyBase(ctx, color);
 
@@ -204,5 +206,78 @@ export class AssetFactory {
     // Cockpit gleam dot
     ctx.circle(0, -6, 3.5);
     ctx.fill({ color: 0xffea00 });
+  }
+
+  private static drawRock(ctx: GraphicsContext): void {
+    // 1. Dark boulder base shadow
+    ctx.poly([
+      -34, -14,
+      -18, -34,
+      16, -36,
+      36, -16,
+      34, 18,
+      14, 35,
+      -18, 34,
+      -36, 14,
+    ]);
+    ctx.fill({ color: 0x1e272c });
+
+    // 2. Main faceted body
+    ctx.poly([
+      -32, -12,
+      -16, -32,
+      14, -34,
+      34, -14,
+      32, 16,
+      12, 33,
+      -16, 32,
+      -34, 12,
+    ]);
+    ctx.fill({ color: 0x37474f });
+    ctx.stroke({ color: 0x263238, width: 3 });
+
+    // 3. Top-left light facet
+    ctx.poly([
+      -32, -12,
+      -16, -32,
+      2, -24,
+      -8, -4,
+      -26, 4,
+    ]);
+    ctx.fill({ color: 0x607d8b, alpha: 0.85 });
+
+    // 4. Center-right darker facet
+    ctx.poly([
+      2, -24,
+      14, -34,
+      34, -14,
+      18, 0,
+      -8, -4,
+    ]);
+    ctx.fill({ color: 0x455a64, alpha: 0.9 });
+
+    // 5. Bottom shadow facet
+    ctx.poly([
+      -8, -4,
+      18, 0,
+      32, 16,
+      12, 33,
+      -16, 32,
+    ]);
+    ctx.fill({ color: 0x263238, alpha: 0.8 });
+
+    // 6. Surface crack lines
+    ctx.poly([-6, -14, 4, -4, 0, 10, 8, 16]);
+    ctx.stroke({ color: 0x1c2529, width: 2.5, alpha: 0.95 });
+
+    ctx.poly([4, -4, 14, -6]);
+    ctx.stroke({ color: 0x1c2529, width: 2, alpha: 0.85 });
+
+    // 7. Chisel highlight edges
+    ctx.poly([-16, -32, 14, -34]);
+    ctx.stroke({ color: 0xb0bec5, width: 2, alpha: 0.9 });
+
+    ctx.poly([-32, -12, -16, -32]);
+    ctx.stroke({ color: 0x90a4ae, width: 2, alpha: 0.7 });
   }
 }

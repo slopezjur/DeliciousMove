@@ -86,9 +86,19 @@
         text-shadow: 0 2px 8px rgba(255, 235, 59, 0.4);
       }
 
+      .hud-value.global-score-num {
+        color: #00e5ff;
+        text-shadow: 0 2px 8px rgba(0, 229, 255, 0.4);
+      }
+
       .hud-value.low-moves {
         color: #ff1744;
         animation: pulse 1s infinite;
+      }
+
+      .hud-value.frozen-moves {
+        color: #00e5ff;
+        text-shadow: 0 0 10px rgba(0, 229, 255, 0.8);
       }
 
       @keyframes pulse {
@@ -148,26 +158,75 @@
         vertical-align: middle;
       }
 
-      .moves-bonus-badge.hidden {
+      .moves-frozen-badge {
+        display: inline-block;
+        font-size: 8px;
+        font-weight: 800;
+        color: #00e5ff;
+        background: rgba(0, 229, 255, 0.2);
+        border: 1px solid rgba(0, 229, 255, 0.45);
+        padding: 1px 5px;
+        border-radius: 6px;
+        margin-left: 3px;
+        vertical-align: middle;
+        letter-spacing: 0.3px;
+      }
+
+      .moves-bonus-badge.hidden,
+      .moves-frozen-badge.hidden,
+      .bonus-phase-badge.hidden {
         display: none;
+      }
+
+      .bonus-phase-badge {
+        display: inline-block;
+        font-size: 9px;
+        font-weight: 900;
+        color: #ffd700;
+        background: linear-gradient(90deg, rgba(0, 229, 255, 0.25), rgba(255, 215, 0, 0.25));
+        border: 1px solid rgba(255, 215, 0, 0.6);
+        box-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+        padding: 2px 8px;
+        border-radius: 12px;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        animation: pulse 1.5s infinite;
       }
 
       /* Progress Bar */
       .progress-container {
         flex: 1;
-        max-width: 320px;
+        max-width: 360px;
         margin: 0 16px;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 6px;
       }
 
       .progress-header {
         display: flex;
         justify-content: space-between;
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.7);
-        font-weight: 600;
+        align-items: flex-end;
+        gap: 16px;
+        width: 100%;
+      }
+
+      .score-box {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .target-box {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+      }
+
+      .progress-num {
+        font-size: 15px;
+        font-weight: 900;
+        color: #ffffff;
       }
 
       .progress-track {
@@ -187,6 +246,11 @@
         border-radius: 8px;
         transition: width 0.3s ease;
         box-shadow: 0 0 10px rgba(255, 145, 0, 0.6);
+      }
+
+      #progress-fill.bonus-phase-glow {
+        background: linear-gradient(90deg, #00e5ff, #ffd700, #ff007f) !important;
+        box-shadow: 0 0 14px rgba(255, 215, 0, 0.8) !important;
       }
 
       /* Sound Button */
@@ -526,6 +590,45 @@
         text-shadow: 0 2px 8px rgba(255, 235, 59, 0.4);
       }
 
+      .modal-scores-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        width: 100%;
+      }
+
+      .modal-score-card {
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 14px;
+        padding: 10px 18px;
+        min-width: 120px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .modal-score-caption {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      .modal-score-caption.caption-cyan {
+        color: #00e5ff;
+      }
+
+      #modal-global-score.score-cyan {
+        font-size: 26px;
+        font-weight: 900;
+        color: #00e5ff;
+        text-shadow: 0 2px 10px rgba(0, 229, 255, 0.5);
+      }
+
       #modal-detail {
         font-size: 15px;
         color: rgba(255, 255, 255, 0.75);
@@ -576,8 +679,12 @@
               <span class="hud-label">Level <span id="difficulty-badge" class="difficulty-badge difficulty-easy">EASY</span></span>
               <span id="level-value" class="hud-value">1</span>
             </div>
+            <div class="hud-card" id="global-score-card" title="Total score accumulated across all levels">
+              <span class="hud-label">Global Score</span>
+              <span id="global-score-value" class="hud-value global-score-num">0</span>
+            </div>
             <div class="hud-card" id="moves-card" title="Unused moves from cleared levels accumulate here!">
-              <span class="hud-label">Moves <span id="moves-bonus-badge" class="moves-bonus-badge hidden">+0</span></span>
+              <span class="hud-label">Moves <span id="moves-bonus-badge" class="moves-bonus-badge hidden">+0</span><span id="moves-frozen-badge" class="moves-frozen-badge hidden">❄️ FROZEN</span></span>
               <span id="moves-value" class="hud-value">25</span>
             </div>
             <div class="hud-card" title="Rescue reshuffles left this level">
@@ -593,8 +700,15 @@
 
         <div class="progress-container">
           <div class="progress-header">
-            <span>Score: <strong id="score-value">0</strong></span>
-            <span>Target: <strong id="target-value">4,000</strong></span>
+            <div class="score-box">
+              <span class="hud-label">Score</span>
+              <strong id="score-value" class="progress-num">0</strong>
+            </div>
+            <div id="bonus-phase-indicator" class="bonus-phase-badge hidden">BONUS PHASE ❄️</div>
+            <div class="target-box">
+              <span class="hud-label">Min Target</span>
+              <strong id="target-value" class="progress-num">4,000</strong>
+            </div>
           </div>
           <div class="progress-track">
             <div id="progress-fill"></div>
@@ -606,7 +720,16 @@
         <div class="modal-box">
           <h2 id="modal-title">SWEET VICTORY!</h2>
           <p id="modal-detail">Level cleared.</p>
-          <p id="modal-final-score">0</p>
+          <div class="modal-scores-row">
+            <div class="modal-score-card">
+              <span class="modal-score-caption">Level Score</span>
+              <p id="modal-final-score">0</p>
+            </div>
+            <div id="modal-global-container" class="modal-score-card hidden">
+              <span class="modal-score-caption caption-cyan">Global Score</span>
+              <p id="modal-global-score" class="score-cyan">0</p>
+            </div>
+          </div>
           <button id="modal-action-btn">Play Again</button>
         </div>
       </div>

@@ -20,3 +20,8 @@ export interface IMatchRule {
   readonly priority: number;
   evaluate(context: MatchEvaluationContext): MatchGroup[];
 }
+
+export interface IMatchRuleRegistry {
+  registerRule(rule: IMatchRule): void;
+  getRules(): readonly IMatchRule[];
+}

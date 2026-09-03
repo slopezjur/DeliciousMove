@@ -241,7 +241,12 @@ export class BoardView extends Container implements IBoardView {
 
   public isSpecialTile(pos: Position): boolean {
     const tile = this.board.get(pos.row, pos.col);
-    return tile !== null && tile.special !== SpecialType.None;
+    return tile !== null && tile.special !== SpecialType.None && tile.special !== SpecialType.Rock;
+  }
+
+  public isRock(pos: Position): boolean {
+    const tile = this.board.get(pos.row, pos.col);
+    return tile !== null && tile.special === SpecialType.Rock;
   }
 
   public isValidPosition(pos: Position): boolean {

@@ -85,7 +85,10 @@ describe('GameSession level ladder & move accumulation', () => {
     session.startLevel(1);
     session.onMoveInitiated();
     session.addPoints(1500);
-    expect(session.onTurnCompleted()).toBe(GameState.Victory);
+    // Minimum target reached: qualifies for level clear and enters bonus overtime phase
+    expect(session.isTargetReached()).toBe(true);
+    expect(session.onTurnCompleted()).toBe(GameState.Ready);
+    expect(session.completeWithVictory()).toBe(GameState.Victory);
 
     session.advanceLevel();
     expect(session.getLevel()).toBe(2);
@@ -98,20 +101,45 @@ describe('GameSession level ladder & move accumulation', () => {
     expect(onLevelStarted).toHaveBeenCalledTimes(2);
   });
 
-  it('resets accumulated moves back to 0 when restarting after game over', () => {
+  it('resets accumulated moves and global score back to 0 when restarting after game over', () => {
     const session = makeSession(5, 1000, 2);
     session.startLevel(1);
     session.addPoints(1500); // 5 moves remaining
-    expect(session.onTurnCompleted()).toBe(GameState.Victory);
+    expect(session.completeWithVictory()).toBe(GameState.Victory);
 
     session.advanceLevel();
     expect(session.getMovesLeft()).toBe(10); // 5 base + 5 carried
+    expect(session.getGlobalScore()).toBe(1500);
 
     session.restart();
     expect(session.getLevel()).toBe(1);
     expect(session.getMovesLeft()).toBe(5);
     expect(session.getAccumulatedMoves()).toBe(0);
+    expect(session.getGlobalScore()).toBe(0);
     expect(session.getState()).toBe(GameState.Ready);
+  });
+
+  it('freezes moves once the minimum target score is achieved', () => {
+    const session = makeSession(5, 1000, 2);
+    session.startLevel(1);
+
+    // Initial move before target
+    session.onMoveInitiated();
+    expect(session.getMovesLeft()).toBe(4);
+
+    // Reach minimum target
+    session.addPoints(1000);
+    expect(session.isTargetReached()).toBe(true);
+    expect(session.isBonusPhase()).toBe(true);
+
+    // Subsequent moves in bonus phase do NOT consume moves
+    session.onTurnCompleted();
+    expect(session.getState()).toBe(GameState.Ready);
+    session.onMoveInitiated();
+    expect(session.getMovesLeft()).toBe(4); // Frozen!
+
+    session.onMoveInitiated();
+    expect(session.getMovesLeft()).toBe(4); // Still frozen!
   });
 
   it('publishes an infinite ladder with alternating progression', () => {

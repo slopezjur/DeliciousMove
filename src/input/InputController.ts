@@ -14,6 +14,7 @@ export class InputController implements IInputController {
   private boardView: IBoardInputSurface;
   private onSwap: SwapCallback;
   private onActivate?: ActivateCallback;
+  private onActivity?: () => void;
 
   private locked: boolean = false;
   private isPointerDown: boolean = false;
@@ -23,10 +24,16 @@ export class InputController implements IInputController {
 
   private readonly DRAG_THRESHOLD = 22;
 
-  constructor(boardView: IBoardInputSurface, onSwap: SwapCallback, onActivate?: ActivateCallback) {
+  constructor(
+    boardView: IBoardInputSurface,
+    onSwap: SwapCallback,
+    onActivate?: ActivateCallback,
+    onActivity?: () => void
+  ) {
     this.boardView = boardView;
     this.onSwap = onSwap;
     this.onActivate = onActivate;
+    this.onActivity = onActivity;
 
     this.setupListeners();
   }
@@ -40,6 +47,8 @@ export class InputController implements IInputController {
     if (locked) {
       this.clearSelection();
       this.resetDrag();
+    } else {
+      this.onActivity?.();
     }
   }
 
@@ -53,10 +62,14 @@ export class InputController implements IInputController {
 
   private handlePointerDown(e: FederatedPointerEvent): void {
     if (this.locked) return;
+    this.onActivity?.();
 
     const local = this.boardView.toLocal(e.global);
     const gridPos = this.boardView.localToGrid(local.x, local.y);
     if (!gridPos) return;
+
+    // Rock obstacles are static: reject picking up or dragging rocks
+    if (this.boardView.isRock?.(gridPos)) return;
 
     this.isPointerDown = true;
     this.startPointerPos = { x: local.x, y: local.y };
@@ -105,6 +118,12 @@ export class InputController implements IInputController {
     this.resetDrag();
 
     if (!tappedPos) {
+      this.clearSelection();
+      return;
+    }
+
+    // Rock obstacles are static: reject selection or activation
+    if (this.boardView.isRock?.(tappedPos)) {
       this.clearSelection();
       return;
     }

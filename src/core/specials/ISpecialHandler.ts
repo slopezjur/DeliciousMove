@@ -53,3 +53,10 @@ export interface ISpecialComboHandler {
     destroyedTileIds: Set<number>
   ): { effects: SpecialTriggerEffect[]; secondaryDetonations: TileData[] };
 }
+
+export interface ISpecialRegistry {
+  registerEffectHandler(handler: ISpecialEffectHandler): void;
+  registerComboHandler(handler: ISpecialComboHandler): void;
+  getEffectHandler(type: SpecialType): ISpecialEffectHandler | undefined;
+  findComboHandler(a: TileData, b: TileData): ISpecialComboHandler | undefined;
+}
