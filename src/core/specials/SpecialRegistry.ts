@@ -16,7 +16,7 @@ const isStriped = (s: SpecialType) => s === SpecialType.StripedHorizontal || s =
  * chained detonation. Shared by every effect handler (DRY).
  */
 function consumeTile(tile: TileData, context: SpecialDetonationContext, affected: number[]): void {
-  if (tile.special === SpecialType.Rock) return; // Rocks are unbreakable obstacles
+  if (tile.special === SpecialType.Rock || context.protectedTileIds?.has(tile.id)) return;
   affected.push(tile.id);
   context.destroyedTileIds.add(tile.id);
   if (tile.special !== SpecialType.None && tile.id !== context.sourceTile.id) {
@@ -89,6 +89,7 @@ export class ColorBombHandler implements ISpecialEffectHandler {
 
     const colorCounts = new Map<TileColor, number>();
     context.board.forEachTile((t) => {
+      if (t.special === SpecialType.Rock || context.protectedTileIds?.has(t.id)) return;
       colorCounts.set(t.color, (colorCounts.get(t.color) || 0) + 1);
     });
 
@@ -124,7 +125,7 @@ export class AirplaneHandler implements ISpecialEffectHandler {
     }
 
     // 2. Select target tile to fly to
-    const target = this.pickTarget(board, sourceTile, context.destroyedTileIds);
+    const target = this.pickTarget(context);
     if (target) {
       consumeTile(target, context, affected);
     }
@@ -137,12 +138,12 @@ export class AirplaneHandler implements ISpecialEffectHandler {
     };
   }
 
-  private pickTarget(board: Board, sourceTile: TileData, destroyedTileIds: Set<number>): TileData | null {
+  private pickTarget({ board, sourceTile, destroyedTileIds, protectedTileIds }: SpecialDetonationContext): TileData | null {
     const candidates: TileData[] = [];
     const specialCandidates: TileData[] = [];
 
     board.forEachTile((t) => {
-      if (t.id === sourceTile.id || destroyedTileIds.has(t.id)) return;
+      if (t.id === sourceTile.id || destroyedTileIds.has(t.id) || protectedTileIds?.has(t.id)) return;
       if (t.special === SpecialType.Rock) return; // Rocks are unbreakable and never targeted
       if (t.special !== SpecialType.None) {
         specialCandidates.push(t);
@@ -216,7 +217,7 @@ export class ColorBombStripedComboHandler implements ISpecialComboHandler {
 
     const converted: TileData[] = [];
     board.forEachTile((t) => {
-      if (t.color === targetColor && t.id !== striped.id) {
+      if (t.color === targetColor && t.special !== SpecialType.Rock && t.id !== striped.id && t.id !== bomb.id) {
         t.special =
           this.random.next() > 0.5 ? SpecialType.StripedHorizontal : SpecialType.StripedVertical;
         converted.push(t);
@@ -256,7 +257,7 @@ export class ColorBombAirplaneComboHandler implements ISpecialComboHandler {
 
     const converted: TileData[] = [];
     board.forEachTile((t) => {
-      if (t.color === targetColor && t.id !== plane.id) {
+      if (t.color === targetColor && t.special !== SpecialType.Rock && t.id !== plane.id && t.id !== bomb.id) {
         t.special = SpecialType.Airplane;
         converted.push(t);
       }
@@ -291,7 +292,7 @@ export class ColorBombNormalComboHandler implements ISpecialComboHandler {
     const affected: number[] = [];
     const secondary: TileData[] = [];
     board.forEachTile((t) => {
-      if (t.color === targetColor) {
+      if (t.color === targetColor && t.special !== SpecialType.Rock && t.id !== bomb.id) {
         destroyed.add(t.id);
         affected.push(t.id);
         if (t.special !== SpecialType.None) secondary.push(t);

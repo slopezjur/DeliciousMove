@@ -36,6 +36,8 @@ export interface SpecialDetonationContext {
   triggerQueue: TileData[];
   /** Color of the match or blast that set this special off, when known. */
   triggerColor?: TileColor;
+  /** New specials cannot be targeted, destroyed or chained in their creation pass. */
+  protectedTileIds?: ReadonlySet<number>;
 }
 
 export interface ISpecialEffectHandler {

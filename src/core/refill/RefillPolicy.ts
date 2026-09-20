@@ -56,19 +56,23 @@ export class BonusRefillPolicy implements IRefillPolicy {
   }
 
   /**
-   * Selects a color that avoids forming 3-in-a-row matches and prioritizes isolating from immediate neighbors.
+   * Avoids line and square matches when possible, then prefers isolated colors.
    */
   private pickInertColor(board: Board, r: number, c: number): TileColor {
     const forbidden = new Set<TileColor>();
+    const candyAt = (row: number, col: number) => {
+      const tile = board.get(row, col);
+      return tile?.special === SpecialType.Rock ? null : tile;
+    };
 
     // Horizontal 3-in-a-row checks
-    const left1 = board.get(r, c - 1);
-    const left2 = board.get(r, c - 2);
+    const left1 = candyAt(r, c - 1);
+    const left2 = candyAt(r, c - 2);
     if (left1 && left2 && left1.color === left2.color) {
       forbidden.add(left1.color);
     }
-    const right1 = board.get(r, c + 1);
-    const right2 = board.get(r, c + 2);
+    const right1 = candyAt(r, c + 1);
+    const right2 = candyAt(r, c + 2);
     if (right1 && right2 && right1.color === right2.color) {
       forbidden.add(right1.color);
     }
@@ -77,18 +81,30 @@ export class BonusRefillPolicy implements IRefillPolicy {
     }
 
     // Vertical 3-in-a-row checks
-    const up1 = board.get(r - 1, c);
-    const up2 = board.get(r - 2, c);
+    const up1 = candyAt(r - 1, c);
+    const up2 = candyAt(r - 2, c);
     if (up1 && up2 && up1.color === up2.color) {
       forbidden.add(up1.color);
     }
-    const down1 = board.get(r + 1, c);
-    const down2 = board.get(r + 2, c);
+    const down1 = candyAt(r + 1, c);
+    const down2 = candyAt(r + 2, c);
     if (down1 && down2 && down1.color === down2.color) {
       forbidden.add(down1.color);
     }
     if (up1 && down1 && up1.color === down1.color) {
       forbidden.add(up1.color);
+    }
+
+    for (const dr of [-1, 1]) {
+      for (const dc of [-1, 1]) {
+        const vertical = candyAt(r + dr, c);
+        const horizontal = candyAt(r, c + dc);
+        const diagonal = candyAt(r + dr, c + dc);
+        if (vertical && horizontal && diagonal
+          && vertical.color === horizontal.color && vertical.color === diagonal.color) {
+          forbidden.add(vertical.color);
+        }
+      }
     }
 
     const nonMatching = this.availableColors.filter((col) => !forbidden.has(col));

@@ -1,5 +1,6 @@
 import { Board } from './Board.ts';
 import { IMatchDetector, MatchDetector } from './MatchDetector.ts';
+import { isProductiveColorSwap } from './matching/MatchEligibility.ts';
 import {
   ISpecialResolver,
   SpecialResolver,
@@ -117,7 +118,7 @@ export class CascadeResolver implements ICascadeResolver {
     const matches = this.matchDetector.detectMatches(board, [posA, posB]);
 
     // 2. If neither tile is special, the swap must produce at least one color match.
-    if (!hasSpecialInvolved && matches.length === 0) {
+    if (!hasSpecialInvolved && !isProductiveColorSwap(matches, tileA, tileB)) {
       board.swap(posA, posB); // Revert
       return { valid: false, steps: [] };
     }
@@ -231,7 +232,9 @@ export class CascadeResolver implements ICascadeResolver {
 
     const triggeredEffects: SpecialTriggerEffect[] = [];
     if (detonationBatches.length > 0) {
-      this.specialResolver.detonate(board, detonationBatches, destroyedIds, triggeredEffects);
+      this.specialResolver.detonate(board, detonationBatches, destroyedIds, triggeredEffects, {
+        protectedTileIds: new Set(spawnedSpecials.map(tile => tile.id)),
+      });
     }
 
     // Newly spawned specials always survive their own pass, even when a chained blast

@@ -23,7 +23,7 @@ export class ColorBombRule implements IMatchRule {
     const matches: MatchGroup[] = [];
 
     for (const h of hRuns) {
-      if (!consumedH.has(h) && h.tiles.length >= 5) {
+      if (!consumedH.has(h) && h.tiles.length >= 5 && !h.tiles.some(t => consumedTileIds.has(t.id))) {
         consumedH.add(h);
         h.tiles.forEach((t) => consumedTileIds.add(t.id));
         const centerTile = h.tiles[Math.floor(h.tiles.length / 2)];
@@ -41,7 +41,7 @@ export class ColorBombRule implements IMatchRule {
     }
 
     for (const v of vRuns) {
-      if (!consumedV.has(v) && v.tiles.length >= 5) {
+      if (!consumedV.has(v) && v.tiles.length >= 5 && !v.tiles.some(t => consumedTileIds.has(t.id))) {
         consumedV.add(v);
         v.tiles.forEach((t) => consumedTileIds.add(t.id));
         const centerTile = v.tiles[Math.floor(v.tiles.length / 2)];
@@ -70,9 +70,9 @@ export class IntersectionWrappedRule implements IMatchRule {
     const matches: MatchGroup[] = [];
 
     for (const h of hRuns) {
-      if (consumedH.has(h)) continue;
+      if (consumedH.has(h) || h.tiles.some(t => consumedTileIds.has(t.id))) continue;
       for (const v of vRuns) {
-        if (consumedV.has(v)) continue;
+        if (consumedV.has(v) || v.tiles.some(t => consumedTileIds.has(t.id))) continue;
 
         if (h.color === v.color) {
           const intersection = h.tiles.find((ht) => v.tiles.some((vt) => vt.id === ht.id));
@@ -184,7 +184,9 @@ export class NormalMatchRule implements IMatchRule {
     for (const h of hRuns) {
       if (!consumedH.has(h)) {
         const available = h.tiles.filter((t) => !consumedTileIds.has(t.id));
-        if (available.length >= 3) {
+        // The original run already qualified. Clear even a short remainder when
+        // a higher-priority shape owns its other tiles.
+        if (available.length > 0) {
           consumedH.add(h);
           available.forEach((t) => consumedTileIds.add(t.id));
           matches.push({
@@ -198,7 +200,7 @@ export class NormalMatchRule implements IMatchRule {
     for (const v of vRuns) {
       if (!consumedV.has(v)) {
         const available = v.tiles.filter((t) => !consumedTileIds.has(t.id));
-        if (available.length >= 3) {
+        if (available.length > 0) {
           consumedV.add(v);
           available.forEach((t) => consumedTileIds.add(t.id));
           matches.push({

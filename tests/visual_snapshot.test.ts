@@ -74,13 +74,13 @@ describe('cascade visual snapshots', () => {
     } finally { view.destroy({ children: true }); }
   });
 
-  it('plays multiple cascades without modifying the resolved domain board or event payloads', async () => {
+  it.each([1, 20, 100])('plays multiple cascades at %sx speed without modifying domain state or events', async playbackSpeed => {
     const { board, resolver, move } = setup(), view = new BoardView(board);
     view.initFromBoard();
     vi.spyOn(view.vfx, 'createParticleBurst').mockImplementation(() => {});
     const queue = new AnimationQueue(view);
     const speed = gsap.globalTimeline.timeScale();
-    gsap.globalTimeline.timeScale(20);
+    gsap.globalTimeline.timeScale(playbackSpeed);
     try {
       const before = board.getSnapshot();
       await queue.animateSwap(board.get(move.from.row, move.from.col)!.id,

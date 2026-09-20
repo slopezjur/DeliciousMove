@@ -53,6 +53,12 @@ original before allowing a new checkpoint.
 The first released save format is schema 1 / rules 1. There are no invented legacy
 migrations. Register actual transformations when a released format changes.
 
+The matching-consistency fixes retain schema 1 / rules 1: completed-level
+checkpoints keep their board, score and banked moves, and still resume at the victory
+screen. They do not require a state transformation or invalidate previous victories.
+Old diagnostic turn replays may produce different results after a gameplay bug fix;
+exact replay still requires the game revision that produced the report.
+
 1. Increment `SAVE_SCHEMA_VERSION` for serialization changes, or
    `GAME_RULES_VERSION` for changes that make a saved board/session incompatible.
    Cosmetic changes and translations normally require neither.

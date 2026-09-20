@@ -20,13 +20,19 @@ export interface SpecialDetonationBatch {
   triggerColor?: TileColor;
 }
 
+export interface SpecialDetonationOptions {
+  protectedTileIds?: ReadonlySet<number>;
+  alreadyTriggeredTileIds?: ReadonlySet<number>;
+}
+
 export interface ISpecialResolver {
   resolveSpecialSwapCombo(board: Board, posA: Position, posB: Position): SpecialComboResult;
   detonate(
     board: Board,
     batches: SpecialDetonationBatch[],
     destroyedTileIds: Set<number>,
-    effects: SpecialTriggerEffect[]
+    effects: SpecialTriggerEffect[],
+    options?: SpecialDetonationOptions
   ): void;
 }
 
@@ -46,7 +52,7 @@ export class SpecialResolver implements ISpecialResolver {
     const tileA = board.get(posA.row, posA.col);
     const tileB = board.get(posB.row, posB.col);
 
-    if (!tileA || !tileB) {
+    if (!tileA || !tileB || tileA.special === SpecialType.Rock || tileB.special === SpecialType.Rock) {
       return { executed: false, effects: [], destroyedTileIds: new Set() };
     }
 
@@ -59,7 +65,11 @@ export class SpecialResolver implements ISpecialResolver {
     const { effects, secondaryDetonations } = handler.execute(board, tileA, tileB, destroyedTileIds);
 
     if (secondaryDetonations.length > 0) {
-      this.detonate(board, [{ specials: secondaryDetonations }], destroyedTileIds, effects);
+      // Conversion combos explicitly detonate their striped/airplane partner;
+      // other combo participants have already fired as part of the combo.
+      const secondaryIds = new Set(secondaryDetonations.map(tile => tile.id));
+      const alreadyTriggeredTileIds = new Set([tileA.id, tileB.id].filter(id => !secondaryIds.has(id)));
+      this.detonate(board, [{ specials: secondaryDetonations }], destroyedTileIds, effects, { alreadyTriggeredTileIds });
     }
 
     return { executed: true, effects, destroyedTileIds };
@@ -74,7 +84,8 @@ export class SpecialResolver implements ISpecialResolver {
     board: Board,
     batches: SpecialDetonationBatch[],
     destroyedTileIds: Set<number>,
-    effects: SpecialTriggerEffect[]
+    effects: SpecialTriggerEffect[],
+    options: SpecialDetonationOptions = {}
   ): void {
     const queue: { tile: TileData; triggerColor?: TileColor }[] = [];
     for (const batch of batches) {
@@ -83,15 +94,17 @@ export class SpecialResolver implements ISpecialResolver {
       }
     }
 
-    const processedIds = new Set<number>();
+    const processedIds = new Set(options.alreadyTriggeredTileIds);
 
     while (queue.length > 0) {
       const { tile, triggerColor } = queue.shift()!;
+      if (tile.special === SpecialType.Rock || tile.special === SpecialType.None) continue;
+      // An all-special match may replace one old special with a new one at the
+      // same ID. Its copied original still fires, while the new board tile cannot.
+      if (options.protectedTileIds?.has(tile.id) && board.get(tile.row, tile.col) === tile) continue;
       if (processedIds.has(tile.id)) continue;
       processedIds.add(tile.id);
       destroyedTileIds.add(tile.id);
-
-      if (tile.special === SpecialType.None) continue;
 
       const handler = this.registry.getEffectHandler(tile.special);
       if (!handler) continue;
@@ -104,6 +117,7 @@ export class SpecialResolver implements ISpecialResolver {
           destroyedTileIds,
           triggerQueue: chained,
           triggerColor,
+          protectedTileIds: options.protectedTileIds,
         })
       );
 

@@ -128,7 +128,6 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
                     alpha: 0.1,
                     duration: 0.22,
                     ease: 'power2.in',
-                    onComplete: () => this.boardView.removeTileSprite(sourceId),
                   },
                   0
                 ).to(
@@ -214,7 +213,6 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
                 alpha: 0,
                 duration: 0.14,
                 ease: 'power2.in',
-                onComplete: () => this.boardView.removeTileSprite(id),
               },
               0.06
             );
@@ -222,7 +220,8 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
         });
       });
 
-      // Ensure all destroyed tiles are explicitly removed before gravity drops begin
+      // Remove sprites only after the timeline completes. Removing them inside
+      // tween callbacks kills child tweens and can suppress the parent's completion.
       step.matchedTileIds.forEach((id) => this.boardView.removeTileSprite(id));
 
       // 4. Animate drops and spawns with constant-velocity lockstep column waterfall

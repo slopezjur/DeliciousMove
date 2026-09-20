@@ -6,7 +6,7 @@ export class SquareAirplaneRule implements IMatchRule {
   public readonly priority = 250;
 
   public evaluate(ctx: MatchEvaluationContext): MatchGroup[] {
-    const { board, hRuns, vRuns, consumedH, consumedV, interactionPositions, consumedTileIds } = ctx;
+    const { board, interactionPositions, consumedTileIds } = ctx;
     if (!board) return [];
     const matches: MatchGroup[] = [];
 
@@ -19,44 +19,28 @@ export class SquareAirplaneRule implements IMatchRule {
 
         if (!t0 || !t1 || !t2 || !t3) continue;
 
-        // Check if any tile is already consumed or already a special candy
-        if (
-          consumedTileIds.has(t0.id) ||
-          consumedTileIds.has(t1.id) ||
-          consumedTileIds.has(t2.id) ||
-          consumedTileIds.has(t3.id) ||
-          t0.special !== SpecialType.None ||
-          t1.special !== SpecialType.None ||
-          t2.special !== SpecialType.None ||
-          t3.special !== SpecialType.None
-        ) {
-          continue;
-        }
+        // Colored specials match like ordinary candies; rocks never participate.
+        const squareTiles: TileData[] = [t0, t1, t2, t3];
+        if (squareTiles.some(tile => tile.special === SpecialType.Rock)) continue;
 
         // Check 2x2 color identity
         if (t0.color === t1.color && t0.color === t2.color && t0.color === t3.color) {
-          const squareTiles: TileData[] = [t0, t1, t2, t3];
-          squareTiles.forEach((t) => consumedTileIds.add(t.id));
-
-          // Consume runs that overlap these square tiles
-          const squareIds = new Set(squareTiles.map((t) => t.id));
-          for (const h of hRuns) {
-            if (h.tiles.every((t) => squareIds.has(t.id))) consumedH.add(h);
-          }
-          for (const v of vRuns) {
-            if (v.tiles.every((t) => squareIds.has(t.id))) consumedV.add(v);
-          }
+          const available = squareTiles.filter(tile => !consumedTileIds.has(tile.id));
+          if (available.length === 0) continue;
+          available.forEach(tile => consumedTileIds.add(tile.id));
 
           const spawnPos = chooseSpawnPos(squareTiles, interactionPositions, { row: r, col: c });
 
           matches.push({
-            tiles: squareTiles,
+            tiles: available,
             color: t0.color,
-            spawnSpecial: {
+            // Overlapping shapes still clear their remaining tiles, but cannot reuse
+            // already claimed tiles to earn another special.
+            spawnSpecial: available.length === 4 ? {
               type: SpecialType.Airplane,
               position: spawnPos,
               color: t0.color,
-            },
+            } : undefined,
           });
         }
       }

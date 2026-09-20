@@ -36,6 +36,8 @@ change browser language detection in the game.
 
 - Drag a candy onto a neighbor, or tap two adjacent candies to swap them.
 - Normal swaps must form a match. Rejected swaps return to their original positions without spending a move.
+  A normal swap must change the colors in its two cells and involve a moved candy
+  in the resulting match; an unrelated match elsewhere cannot validate it.
 - Tap a special to activate it directly, or swap it with a neighbor to activate it.
 - Rocks cannot be swapped or activated and are immune to special blasts.
 - After ten seconds of inactivity, the game highlights a possible move.
@@ -60,6 +62,16 @@ normal matches. Spawn placement prefers a cell involved in the swap. An existing
 special in that cell is preserved for detonation by choosing a plain candy when possible.
 A newly created special survives its creation pass, including chained blasts.
 
+Colored specials participate in every matching pattern, including 2×2 squares.
+Existing specials caught in a match fire once; newly created specials cannot be
+targeted or triggered until a later pass. If every matched candy is already special,
+the original effect at the upgraded cell still fires before the new candy survives.
+
+Overlapping patterns share tile ownership: each candy is counted once. Higher-priority
+complete patterns claim their reward first; overlapping shapes clear any remaining
+matched candies without reusing claimed tiles to create another reward. Equal-priority
+ties use deterministic scan order (horizontal before vertical; squares top-left first).
+
 ## Specials and combinations
 
 - Striped: clears its row or column.
@@ -82,6 +94,10 @@ Swapping specials combines their effects:
 - Color bomb + airplane: converts that color into airplanes and launches them.
 
 Rocks remain immune to these effects.
+Color-bomb conversions also leave rocks unchanged. Rocks' stored placeholder color
+does not count toward color-bomb target selection or bonus-refill color matching.
+Combo participants do not fire their original effects again when hit by a later
+chain, except partners explicitly detonated by a conversion combo.
 
 ## Endless progression and bonus play
 
@@ -100,6 +116,8 @@ Reaching the target starts the **bonus phase**; it does not immediately open the
 modal. Further moves stop consuming the move budget. Bonus refills favor colors that
 avoid new matches and gradually introduce rocks: a 35% roll for an eligible empty cell,
 at most two rocks per refill wave and at most one newly spawned rock per column per wave.
+Bonus refills avoid both lines and squares when an allowed color is available,
+including squares containing existing specials.
 
 When no legal swap or direct special activation remains during bonus play, the level
 ends in victory. The next level receives its base moves plus all unused moves from

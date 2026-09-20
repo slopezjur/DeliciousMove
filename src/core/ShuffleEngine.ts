@@ -1,5 +1,6 @@
 import { Board } from './Board.ts';
 import { IMatchDetector, MatchDetector } from './MatchDetector.ts';
+import { isProductiveColorSwap } from './matching/MatchEligibility.ts';
 import { SpecialType, Position, TileData } from './TileTypes.ts';
 import { IRandomSource, MathRandomSource } from './random/IRandomSource.ts';
 
@@ -131,7 +132,7 @@ export class ShuffleEngine implements IDeadlockResolver {
     const matches = this.matchDetector.detectMatches(board, [posA, posB]);
     board.swap(posA, posB); // Revert
 
-    return matches.length > 0;
+    return isProductiveColorSwap(matches, tileA, tileB);
   }
 
   private shuffleInPlace(tiles: TileData[]): void {
