@@ -6,6 +6,7 @@ import { TileSprite } from './TileSprite.ts';
 import { AssetFactory } from './AssetFactory.ts';
 import { VFXManager, IVFXManager } from './VFXManager.ts';
 import { IBoardView } from './IBoardViewContracts.ts';
+import { calculateBoardLayout } from './BoardLayout.ts';
 
 export class BoardView extends Container implements IBoardView {
   public get displayObject(): this { return this; }
@@ -71,29 +72,12 @@ export class BoardView extends Container implements IBoardView {
    *                centred once inside the remaining area rather than shifted afterwards.
    */
   public updateLayout(availableWidth: number, availableHeight: number, offsetY: number = 0): void {
-    const isMobile = availableWidth <= 560;
-    const margin = isMobile ? 12 : 24;
-    const framePadding = isMobile ? 10 : 16;
-
-    const safeW = availableWidth;
-    const safeH = availableHeight;
-
-    // Available space for inner grid
-    const maxGridW = safeW - (margin + framePadding) * 2;
-    const maxGridH = safeH - (margin + framePadding) * 2;
-    const maxTarget = Math.max(180, Math.min(maxGridW, maxGridH));
-
-    // Clamp desktop tile size to avoid disproportionate stretching on ultra-wide screens
-    const maxDesktopTile = 84;
-    const computedTile = Math.floor(maxTarget / Math.max(this.board.rows, this.board.cols));
-    this.tileSize = Math.max(28, Math.min(maxDesktopTile, computedTile));
-
-    this.boardPixelWidth = this.tileSize * this.board.cols;
-    this.boardPixelHeight = this.tileSize * this.board.rows;
-
-    // Dead-center the board horizontally and vertically in available space
-    this.x = Math.floor((safeW - this.boardPixelWidth) / 2);
-    this.y = offsetY + Math.floor((safeH - this.boardPixelHeight) / 2);
+    const layout = calculateBoardLayout(availableWidth, availableHeight, this.board.rows, this.board.cols);
+    this.tileSize = layout.tileSize;
+    this.boardPixelWidth = layout.boardWidth;
+    this.boardPixelHeight = layout.boardHeight;
+    this.x = layout.x;
+    this.y = offsetY + layout.y;
 
     // Clip tiles to board boundaries so offscreen spawns never peek outside
     this.tilesMask.clear();
@@ -101,7 +85,7 @@ export class BoardView extends Container implements IBoardView {
     this.tilesMask.fill({ color: 0xffffff });
 
     // Draw ornate game frame behind cells
-    this.drawFancyFrame(framePadding);
+    this.drawFancyFrame(layout.framePadding);
 
     // Update background cells
     for (let r = 0; r < this.board.rows; r++) {

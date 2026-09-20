@@ -49,9 +49,10 @@ export class HUDView implements IHUDView {
 
     if (this.soundBtn) {
       this.soundBtn.addEventListener('click', () => {
-        const isMuted = this.soundService.toggleMute();
-        if (this.soundBtn) this.soundBtn.textContent = isMuted ? '🔇' : '🔊';
+        this.soundService.toggleMute();
+        this.renderSound();
       });
+      this.renderSound();
     }
   }
 
@@ -135,6 +136,7 @@ export class HUDView implements IHUDView {
   }
 
   private refreshLanguage(): void {
+    this.renderSound();
     this.setText(this.difficultyBadgeEl, this.language.t(this.difficulty));
     this.setText(this.scoreEl, this.displayedScore.toLocaleString(this.language.locale));
     this.setText(this.globalScoreEl, this.globalScore.toLocaleString(this.language.locale));
@@ -156,6 +158,14 @@ export class HUDView implements IHUDView {
       }
     };
     this.animFrameId = requestAnimationFrame(step);
+  }
+
+  private renderSound(): void {
+    if (!this.soundBtn) return;
+    const enabled = !this.soundService.isMuted();
+    this.soundBtn.textContent = this.language.t(enabled ? 'soundOn' : 'soundOff');
+    this.soundBtn.setAttribute('aria-pressed', String(enabled));
+    this.soundBtn.setAttribute('aria-label', this.language.t('soundTip'));
   }
 
   private setText(element: HTMLElement | null, value: string): void {

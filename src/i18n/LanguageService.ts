@@ -4,6 +4,8 @@ export type Locale = 'en' | 'es';
 export const LANGUAGE_KEY = 'deliciousmove.language';
 
 const en = {
+  settings: 'Settings', language: 'Language', sound: 'Sound', soundOn: 'On', soundOff: 'Off',
+  checkpointPending: 'Saves at level end', checkpointSaved: '✓ Level checkpoint saved',
   level: 'Level', globalScore: 'Global Score', moves: 'Moves', shuffles: 'Shuffles',
   score: 'Score', target: 'Min Target', frozen: '❄️ FROZEN', bonus: 'BONUS PHASE ❄️',
   globalTip: 'Total score accumulated across all levels',
@@ -38,6 +40,8 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 const es: Record<MessageKey, string> = {
+  settings: 'Ajustes', language: 'Idioma', sound: 'Sonido', soundOn: 'Activado', soundOff: 'Silenciado',
+  checkpointPending: 'Guardado al terminar el nivel', checkpointSaved: '✓ Nivel completado guardado',
   level: 'Nivel', globalScore: 'Puntuación total', moves: 'Movimientos', shuffles: 'Mezclas',
   score: 'Puntuación', target: 'Objetivo mínimo', frozen: '❄️ CONGELADOS', bonus: 'FASE EXTRA ❄️',
   globalTip: 'Puntuación acumulada en todos los niveles',

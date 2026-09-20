@@ -29,8 +29,12 @@ export class LanguageControls {
       if (this.language.isKey(key)) element.title = this.language.t(key);
     }
     const button = document.getElementById('language-toggle-btn');
+    for (const element of document.querySelectorAll<HTMLElement>('[data-i18n-aria-label]')) {
+      const key = element.dataset.i18nAriaLabel!;
+      if (this.language.isKey(key)) element.setAttribute('aria-label', this.language.t(key));
+    }
     if (button) {
-      button.textContent = this.language.locale === 'en' ? 'ES' : 'EN';
+      button.textContent = this.language.locale === 'en' ? 'Español' : 'English';
       button.setAttribute('aria-label', this.language.t('languageTip'));
     }
   }

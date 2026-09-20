@@ -41,7 +41,7 @@ change browser language detection in the game.
 - Tap a special to activate it directly, or swap it with a neighbor to activate it.
 - Rocks cannot be swapped or activated and are immune to special blasts.
 - After ten seconds of inactivity, the game highlights a possible move.
-- Use the EN/ES button or **L** to change language. The browser language is used initially;
+- Open **Settings** (gear) and use the language button, or press **L**, to change language. The browser language is used initially;
   unsupported languages fall back to English. Explicit choices are remembered.
 - **New Game** starts a fresh run after confirmation; it preserves the old checkpoint in a recovery archive.
 
@@ -71,6 +71,29 @@ Overlapping patterns share tile ownership: each candy is counted once. Higher-pr
 complete patterns claim their reward first; overlapping shapes clear any remaining
 matched candies without reusing claimed tiles to create another reward. Equal-priority
 ties use deterministic scan order (horizontal before vertical; squares top-left first).
+
+## Responsive interface
+
+- Narrow layouts keep level/settings at the top, moves and score progress directly above
+  the board, and total score/rescue shuffles underneath. Windows at least 900px wide
+  use a sidebar even when taller than they are wide. Short windows at least 600px
+  wide also use the compact sidebar.
+- Desktop board size follows available width and height, up to a 1040px canvas.
+  Sidebar width, text, and spacing scale with the board. The complete gameplay group
+  stays centered; no space is reserved for unimplemented features or advertising.
+- Settings contains language, sound, diagnostics, and New Game. The native dialog
+  supports keyboard focus containment, Escape, and outside-click dismissal.
+- A compact checkpoint indicator stays visible; full save details are available in
+  Settings. Storage/recovery warnings remain visible beside the game. Saving still
+  happens only after a completed level, never during a level.
+- CSS owns the board region, using dynamic viewport units and safe-area insets.
+  Pixi measures that region via ResizeObserver; canvas/grid resizing is deferred until
+  turn playback settles. Extremely short windows can scroll instead of clipping controls.
+- Controls have at least 44px touch targets. Long labels and large scores can wrap;
+  the board retains square cells and correct input coordinates at every size.
+
+Validate both languages at 320px/375px/412px phone widths, tablet portrait,
+wide desktop, and short landscape, including bonus-phase badges and the settings dialog.
 
 ## Specials and combinations
 

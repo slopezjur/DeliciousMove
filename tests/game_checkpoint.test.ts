@@ -52,6 +52,47 @@ function environment() {
 }
 
 describe('game checkpoint lifecycle', () => {
+  it('measures the canvas host and defers observed resizes until playback settles', async () => {
+    const env = environment(), board = new Board(), view = new BoardView(board);
+    const viewport = { clientWidth: 351, clientHeight: 351, appendChild: vi.fn() };
+    let resize = () => {};
+    let finish = () => {};
+    const observe = vi.fn();
+    vi.stubGlobal('ResizeObserver', class {
+      observe = observe;
+      constructor(callback: () => void) { resize = callback; }
+    });
+    vi.stubGlobal('document', {
+      getElementById: (id: string) => id === 'board-viewport' ? viewport : null,
+      querySelectorAll: () => [], documentElement: { lang: 'en' }, addEventListener: vi.fn(),
+    });
+    const game = new Game({
+      ...env, board, boardView: view, random: new SeededRandomSource(20),
+      turnCoordinator: {
+        playMove: () => new Promise<boolean>(resolve => { finish = () => resolve(false); }),
+        activateTile: async () => false,
+      },
+    });
+    try {
+      await game.init(env.container);
+      expect(viewport.appendChild).toHaveBeenCalledWith(env.app.canvas);
+      expect(observe).toHaveBeenCalledWith(viewport);
+      expect(env.app.renderer.resize).toHaveBeenLastCalledWith(351, 351);
+      const sizeBefore = view.tileSize;
+      const playing = captured.swap!({ row: 0, col: 0 }, { row: 0, col: 1 });
+      viewport.clientWidth = 720;
+      viewport.clientHeight = 720;
+      resize();
+      expect(env.app.renderer.resize).toHaveBeenLastCalledWith(351, 351);
+      expect(view.tileSize).toBe(sizeBefore);
+      finish();
+      await playing;
+      expect(env.app.renderer.resize).toHaveBeenLastCalledWith(720, 720);
+      expect(view.tileSize).toBeGreaterThan(sizeBefore);
+      expect(env.storage.getItem(SAVE_KEY)).toBeNull();
+    } finally { view.destroy({ children: true }); }
+  });
+
   it('writes only after victory playback settles and preserves the checkpoint through the next level', async () => {
     const env = environment(), board = new Board(), session = new GameSession();
     const view = new BoardView(board);

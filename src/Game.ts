@@ -38,8 +38,8 @@ import { IClipboardService } from './ui/IClipboardService.ts';
 import { BrowserClipboardService } from './ui/ClipboardService.ts';
 import { IdleHintController } from './input/IdleHintController.ts';
 import { IIdleHintController } from './input/IIdleHintController.ts';
+import { SettingsView } from './ui/SettingsView.ts';
 
-const HUD_HEIGHT = 90;
 const END_OF_TURN_MODAL_DELAY_MS = 400;
 
 export interface GameDependencies {
@@ -76,6 +76,8 @@ export class Game {
   private readonly savedRun: GameSave | null;
   private turnInFlight = false;
   private layoutPending = false;
+  private boardViewport: HTMLElement | null = null;
+  private layoutObserver?: ResizeObserver;
   private modalTimer?: ReturnType<typeof setTimeout>;
   private readonly app: Application;
   private readonly board: Board;
@@ -176,20 +178,26 @@ export class Game {
 
   public async init(containerElement: HTMLElement): Promise<void> {
     await this.app.init({
-      resizeTo: window,
-      backgroundColor: 0x160c28,
+      backgroundAlpha: 0,
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
       antialias: true,
       preference: 'webgl',
     });
 
-    containerElement.appendChild(this.app.canvas);
+    this.boardViewport = document.getElementById('board-viewport');
+    (this.boardViewport ?? containerElement).appendChild(this.app.canvas);
     this.app.stage.addChild(this.boardView.displayObject);
 
     window.addEventListener('resize', this.onResize.bind(this));
     document.addEventListener('fullscreenchange', this.onResize.bind(this));
+    window.visualViewport?.addEventListener('resize', this.onResize.bind(this));
+    if (this.boardViewport && typeof ResizeObserver !== 'undefined') {
+      this.layoutObserver = new ResizeObserver(() => this.onResize());
+      this.layoutObserver.observe(this.boardViewport);
+    }
 
+    new SettingsView();
     new LanguageControls(this.language, () => this.onResize());
     this.language.subscribe(() => this.renderSaveStatus());
     document.getElementById('new-game-btn')?.addEventListener('click', () => {
@@ -287,19 +295,16 @@ export class Game {
   private onResize(): void {
     if (this.turnInFlight) { this.layoutPending = true; return; }
     this.layoutPending = false;
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const width = this.boardViewport?.clientWidth ?? window.innerWidth;
+    const height = this.boardViewport?.clientHeight ?? window.innerHeight;
+    if (width <= 0 || height <= 0) return;
 
-    // Explicitly resize the Pixi renderer to the actual viewport dimensions
+    // CSS owns placement; Pixi owns only the measured board region.
     if (this.app.renderer) {
       this.app.renderer.resize(width, height);
     }
 
-    const hudEl = document.getElementById('top-hud');
-    const hudHeight = hudEl ? hudEl.offsetHeight : HUD_HEIGHT;
-
-    // The board is centred once inside the area left below the HUD.
-    this.boardView.updateLayout(width, Math.max(200, height - hudHeight), hudHeight);
+    this.boardView.updateLayout(width, height);
   }
 
   private async runTurn(action: () => Promise<boolean>): Promise<boolean> {
@@ -375,9 +380,15 @@ export class Game {
   private renderSaveStatus(): void {
     if (typeof document === 'undefined') return;
     const element = document.getElementById('save-status');
+    const detail = this.language.t(`save_${this.saves.status}`);
+    const warning = !['none', 'saved'].includes(this.saves.status);
+    const detailElement = document.getElementById('save-detail');
+    if (detailElement) detailElement.textContent = detail;
     if (element) {
-      element.textContent = this.language.t(`save_${this.saves.status}`);
-      element.dataset.warning = String(!['none', 'saved'].includes(this.saves.status));
+      element.textContent = warning ? detail : this.language.t(
+        this.saves.status === 'saved' ? 'checkpointSaved' : 'checkpointPending');
+      element.title = detail;
+      element.dataset.warning = String(warning);
     }
   }
 }
