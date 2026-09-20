@@ -28,6 +28,7 @@ export class BoardInitializer implements IBoardInitializer {
     if (seedColors) {
       for (let r = 0; r < board.rows; r++) {
         for (let c = 0; c < board.cols; c++) {
+          if (!board.isValidPosition(r, c)) continue;
           board.createTile(r, c, seedColors[r][c]);
         }
       }
@@ -36,6 +37,7 @@ export class BoardInitializer implements IBoardInitializer {
 
     for (let r = 0; r < board.rows; r++) {
       for (let c = 0; c < board.cols; c++) {
+        if (!board.isValidPosition(r, c)) continue;
         const excludedColors = this.collectExcludedColors(board, r, c);
         const available = this.availableColors.filter((color) => !excludedColors.has(color));
         const pool = available.length > 0 ? available : this.availableColors;

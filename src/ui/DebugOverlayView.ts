@@ -3,6 +3,7 @@ import { IGameTelemetryService } from '../core/telemetry/IGameTelemetry.ts';
 import { IDebugOverlayView } from './IDebugOverlayView.ts';
 import { IClipboardService } from './IClipboardService.ts';
 import { BrowserClipboardService } from './ClipboardService.ts';
+import { objectiveLabel } from './ObjectivesView.ts';
 
 export interface DebugOverlayCallbacks {
   onUnlockInput: () => void;
@@ -160,6 +161,12 @@ export class DebugOverlayView implements IDebugOverlayView {
           <span class="dbg-label">${this.language.t('boardSpecials')}</span>
           <span class="dbg-val">${specialsStr}</span>
         </div>
+      </div>
+
+      <div class="dbg-section">
+        <div class="dbg-section-title">${this.language.t('objectives')}</div>
+        <div>${(snap.objectives ?? []).map(p => `${objectiveLabel(this.language, p.objective)}: ${p.current}/${p.objective.target}`).join(' · ')}</div>
+        <div>${Object.entries(snap.blockersOnBoard ?? {}).map(([kind, count]) => `${kind}: ${count}`).join(' · ')}</div>
       </div>
 
       <div class="dbg-section">

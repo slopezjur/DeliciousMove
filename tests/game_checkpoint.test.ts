@@ -6,6 +6,7 @@ import { GameSession, GameState } from '../src/core/GameSession.ts';
 import { SeededRandomSource } from '../src/core/random/IRandomSource.ts';
 import { BoardView } from '../src/view/BoardView.ts';
 import { SAVE_KEY } from '../src/persistence/SaveStore.ts';
+import { RECORDS_KEY } from '../src/persistence/RecordsStore.ts';
 import { Position } from '../src/core/TileTypes.ts';
 
 const captured = vi.hoisted(() => ({
@@ -125,6 +126,8 @@ describe('game checkpoint lifecycle', () => {
       finishPlayback();
       await playing;
       const checkpoint = env.storage.getItem(SAVE_KEY)!;
+      const records = env.storage.getItem(RECORDS_KEY)!;
+      expect(JSON.parse(records)).toMatchObject({ bestLevel: 1, bestScore: session.getGlobalScore() });
       expect(JSON.parse(checkpoint).session.state).toBe(GameState.Victory);
       session.advanceLevel();
       expect(session.getLevel()).toBe(2);
@@ -149,6 +152,7 @@ describe('game checkpoint lifecycle', () => {
         expect(restoredSession.getLevel()).toBe(1);
         expect(restoredSession.getScore()).toBe(0);
         expect(env.storage.getItem(SAVE_KEY)).toBeNull();
+        expect(env.storage.getItem(RECORDS_KEY)).toBe(records);
         expect([...env.data.keys()].some(key => key.startsWith(SAVE_KEY + '.recovery.'))).toBe(true);
       } finally { restoredView.destroy({ children: true }); }
     } finally { view.destroy({ children: true }); }

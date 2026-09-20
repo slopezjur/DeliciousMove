@@ -62,7 +62,7 @@ export class BonusRefillPolicy implements IRefillPolicy {
     const forbidden = new Set<TileColor>();
     const candyAt = (row: number, col: number) => {
       const tile = board.get(row, col);
-      return tile?.special === SpecialType.Rock ? null : tile;
+      return tile && board.canMatch(tile) ? tile : null;
     };
 
     // Horizontal 3-in-a-row checks

@@ -4,7 +4,7 @@
 
 The game stores progress in browser localStorage, not cookies. Nothing is uploaded.
 Only a completed level creates a checkpoint, after its final animations and bonus
-phase finish. Ordinary moves, reaching the score target, rescue shuffles, a loss,
+phase finish. Ordinary moves, completing objectives, rescue shuffles, a loss,
 and starting the next level do not overwrite that checkpoint.
 
 Reloading restores the last completed level's victory screen. Choose **Next Level**
@@ -15,7 +15,7 @@ and removes it from automatic resume; the new run saves after its first victory.
 **Play Again** after losing also starts a new run and archives the prior checkpoint.
 
 Language is an independent preference: the primary browser language selects Spanish
-for `es` / `es-*`, with English as the fallback. The EN/ES button or **L** overrides
+for `es` / `es-*`, with English as the fallback. The language selector in Settings shows the current choice; it or **L** overrides
 that choice immediately and persists it independently of level completion.
 The shortcut ignores editable fields and modified/repeated key events.
 
@@ -30,9 +30,19 @@ continues and the HUD explains that saving is unavailable.
 - `deliciousmove.save.backup`: previous readable checkpoint, rotated before replacement.
 - `deliciousmove.save.recovery.<timestamp>[.<suffix>]`: originals archived by explicit restart.
 - `deliciousmove.language`: explicit `en` or `es` preference.
+- `deliciousmove.records`: version-1 lifetime records (`bestLevel`, `bestScore`).
+
+Records mean highest **completed** level and highest cumulative score at a completed
+level. They update after victory playback, never during an unfinished level or a loss.
+New Game does not reset records. An existing completed checkpoint seeds missing records;
+the two maxima are merged independently, including when another tab saved a higher result.
+Records have their own version because they outlive individual run checkpoints. Unknown
+versions or malformed records are preserved without overwrite; the HUD reports the issue.
+Future record format changes must add an explicit migration before enabling writes.
 
 The checkpoint contains `schemaVersion`, `rulesVersion`, `savedAt`, board dimensions,
-all tile identities/colors/specials/positions, the next tile ID, complete session
+all tile identities/colors/specials/positions/kinds/layers, optional cell terrain
+(playable mask, jelly, ice, exits), the next tile ID, objective definitions/progress, complete session
 configuration/counters, and the mulberry32 random-generator state. Snapshots are
 independent copies, not references to mutable game objects.
 
@@ -41,8 +51,9 @@ independent copies, not references to mutable game objects.
 checkpoint policy and preservation. `Game` saves only after completed turn playback
 and reconstructs presentation without triggering level initialization on restore.
 
-Validation rejects malformed JSON, duplicate IDs/cells, incomplete grids, unknown
-tile types, invalid counters/states, and unsupported random algorithms.
+Validation rejects malformed JSON, duplicate IDs/cells, incomplete playable grids,
+tiles in gaps, unknown tile types, invalid durability/counters/states, inconsistent
+jelly/blocker/ingredient progress, and unsupported random algorithms.
 An invalid primary may recover from a readable backup, but automatic writes stay
 paused to preserve the damaged original. Future-version and unmigratable saves are
 also preserved without overwrite. Starting a new run explicitly archives the
@@ -50,12 +61,18 @@ original before allowing a new checkpoint.
 
 ## Adding a breaking change
 
-The first released save format is schema 1 / rules 1. There are no invented legacy
-migrations. Register actual transformations when a released format changes.
+The current save format is **schema 2 / rules 3**. Installed 1→2 migrations retain
+the original board, score, level, banked moves, global score, and RNG. A legacy
+checkpoint receives an explicit score objective and matching progress. Missing
+terrain means a full rectangle. It still resumes at its victory screen; only
+advancing to the next level selects a new objective/layout family.
+The rules 2→3 migration retains the saved level's original requirements and completion
+state. Only newly generated levels add mandatory minimum score alongside the feature
+objectives. Already completed jelly/ice levels are never made incomplete retroactively.
 
-The matching-consistency fixes retain schema 1 / rules 1: completed-level
-checkpoints keep their board, score and banked moves, and still resume at the victory
-screen. They do not require a state transformation or invalidate previous victories.
+Migration occurs in memory on load and never rewrites the original raw checkpoint.
+The next completed-level save writes schema 2 / rules 3 and rotates the readable original to backup.
+Clients running v1 must reject v2 saves rather than reinterpret new cell/object data.
 Old diagnostic turn replays may produce different results after a gameplay bug fix;
 exact replay still requires the game revision that produced the report.
 
@@ -76,16 +93,16 @@ Example of a future field rename (illustrative, not an installed migration):
 
 ```ts
 const schemaMigrations: MigrationRegistry = new Map([
-  [1, (old) => {
+  [2, (old) => {
     const { savedAt, ...rest } = old;
-    return { ...rest, checkpointAt: savedAt, schemaVersion: 2 };
+    return { ...rest, checkpointAt: savedAt, schemaVersion: 3 };
   }],
 ]);
 ```
 
 That example also requires updating the current interface, validator and writer to
-use `checkpointAt`, setting the current schema to 2, and installing this registry
-as the default. Constructor injection allows fixture testing against future
+use `checkpointAt`, setting the current schema to 3, and extending the existing
+default registry without removing the 1→2 migration. Constructor injection allows fixture testing against future
 versions without changing production defaults.
 
 Missing migration paths deliberately suspend writes. A client from an older release

@@ -6,6 +6,36 @@ button:hover { background: #ffffff19; }
 button:disabled { opacity: .45; cursor: default; }
 button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
 .hidden { display: none !important; }
+.objective-list { display: grid; gap: 8px; grid-column: 1 / -1; min-width: 0; }
+.objective-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 8px; border: 1px solid #ffffff20; border-radius: 10px; background: #130a22; font-size: 12px; }
+.objective-item strong { font-variant-numeric: tabular-nums; color: #ffe082; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.objective-item[data-kind="score"] { grid-column: 1 / -1; }
+.objective-item[data-complete="true"] { border-color: #61dfa399; background: #163329; }
+.objective-icon { font-size: 22px; color: #ff7ce4; text-align: center; }
+.objective-icon[data-color="0"] { color: #ff4265; }
+.objective-icon[data-color="1"] { color: #38baff; }
+.objective-icon[data-color="2"] { color: #3ce878; }
+.objective-icon[data-color="3"] { color: #ffe23b; }
+.objective-icon[data-color="4"] { color: #d75aff; }
+.objective-icon[data-color="5"] { color: #ff9e30; }
+.feature-hint { grid-column: 1 / -1; color: #c8b8d8; font-size: 11px; line-height: 1.45; }
+.practice-banner { margin-top: 10px; padding: 8px; font-size: 11px; color: #ffe082; border: 1px dashed #ffe08266; border-radius: 8px; }
+.personal-records { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #ffffff1a; }
+.personal-records strong { color: #ffe082; font-size: 16px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.personal-records .summary-stat { justify-content: space-between; }
+.records-warning { font-size: 11px; color: #ffe082; margin-top: 8px; }
+.bonus-round-banner { grid-column: 1 / -1; padding: 12px; border: 1px solid #64e9ff88; border-radius: 12px; background: #123039; color: #cbfaff; }
+.bonus-round-banner strong { color: #ffe082; font-size: 14px; }
+.bonus-round-banner p { font-size: 12px; line-height: 1.45; margin-top: 6px; }
+.settings-row select { font: inherit; color: inherit; background: #130a22; border: 1px solid #ffffff40; border-radius: 12px; min-height: 44px; min-width: 120px; padding: 8px; }
+.settings-row select:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
+.feature-help { margin-bottom: 18px; color: #c8b8d8; font-size: 13px; line-height: 1.5; }
+.feature-help summary { min-height: 44px; padding: 12px 0; cursor: pointer; color: #ffe082; }
+.feature-help summary:focus-visible { outline: 2px solid #ffe082; }
+.feature-help p { margin: 8px 0; }
+@media (min-width: 360px) and (max-width: 899px) and (min-height: 541px) {
+  .objective-list { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); }
+}
 #game-container {
   /* Size the whole gameplay group from the space available to the square board. */
   --board-size: min(1040px, calc(100dvh - 64px), calc((100vw - 80px) * .74));
@@ -43,6 +73,7 @@ button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
 .progress-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: end; }
 .score-box, .target-box { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .target-box { text-align: right; }
+.target-box[data-complete="true"] .progress-num { color: #61dfa3; }
 .progress-num { font-size: 18px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .progress-track { height: 10px; background: #080311; border: 1px solid #ffffff20; border-radius: 8px; overflow: hidden; }
 #progress-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff338c, #ffb24c, #49e9ac); transition: width .3s ease; }
@@ -92,6 +123,9 @@ button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
   #top-hud #moves-value { font-size: calc(46 * var(--ui-unit)); }
   #top-hud .summary-stat .hud-value { font-size: calc(20 * var(--ui-unit)); }
   #top-hud .progress-num { font-size: calc(18 * var(--ui-unit)); }
+  #top-hud .objective-item { font-size: calc(12 * var(--ui-unit)); }
+  #top-hud .objective-item strong { font-size: calc(14 * var(--ui-unit)); }
+  #top-hud .feature-hint { font-size: calc(11 * var(--ui-unit)); }
   #top-hud .gameplay-stats { padding: calc(20 * var(--ui-unit)); gap: calc(20 * var(--ui-unit)); }
   #top-hud .progress-container { gap: calc(8 * var(--ui-unit)); }
   #top-hud .progress-track { height: calc(10 * var(--ui-unit)); }
@@ -105,8 +139,14 @@ button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
   #game-container { width: min(100%, calc(100dvh + 290px)); gap: 10px 16px; grid-template-columns: minmax(200px, 250px) minmax(0, 1fr); padding-top: max(8px, env(safe-area-inset-top)); padding-bottom: max(8px, env(safe-area-inset-bottom)); }
   .gameplay-stats { gap: 10px; padding: 12px; }
   #moves-value { font-size: 32px; }
-  #board-viewport { max-width: calc(100dvh - 24px); }
+  #board-viewport { max-width: calc(100dvh - 24px); align-self: start; position: sticky; top: max(8px, env(safe-area-inset-top)); }
   #save-status { margin-top: 8px; }
+}
+/* Dense multi-goal sidebars must not push the board below typical laptop screens. */
+@media (min-width: 900px) and (min-height: 541px) and (max-height: 850px) {
+  #top-hud { gap: 12px; }
+  #top-hud .gameplay-stats { gap: 12px; padding: 12px; }
+  #top-hud #moves-value { font-size: 34px; }
 }
 @media (prefers-reduced-motion: reduce) { #progress-fill { transition: none; } }
 /* Debug Overlay */

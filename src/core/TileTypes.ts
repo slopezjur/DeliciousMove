@@ -37,6 +37,8 @@ export interface TileData {
   col: number;
   color: TileColor;
   special: SpecialType;
+  kind?: import('./BoardFeatures.ts').TileKind;
+  layers?: number;
 }
 
 export interface MatchGroup {
@@ -58,6 +60,8 @@ export interface DropMovement {
 
 export interface SpawnData {
   tile: TileData;
+  /** Internal refill sources must not fly through occupied cells or gaps. */
+  appearInPlace?: boolean;
 }
 
 export interface SpecialEvolution {
@@ -69,6 +73,9 @@ export interface SpecialEvolution {
 import { SpecialTriggerEffect } from './specials/ISpecialHandler.ts';
 
 export interface CascadeStep {
+  objectiveEvents?: import('./BoardFeatures.ts').ObjectiveEvent[];
+  cellsAfter?: import('./BoardFeatures.ts').CellState[];
+  updatedTiles?: TileData[];
   matchedTileIds: number[];
   spawnedSpecials: TileData[];
   evolutions?: SpecialEvolution[];

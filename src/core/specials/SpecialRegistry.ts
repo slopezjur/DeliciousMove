@@ -1,6 +1,8 @@
 import { Board } from '../Board.ts';
+import { isCandy, isBlastTarget } from '../BoardFeatures.ts';
 import { TileData, SpecialType, TileColor, Position } from '../TileTypes.ts';
 import { IRandomSource, MathRandomSource } from '../random/IRandomSource.ts';
+import { AirplaneTargetSelector, IAirplaneTargetSelector } from './AirplaneTargetSelector.ts';
 import {
   ISpecialEffectHandler,
   ISpecialComboHandler,
@@ -16,10 +18,10 @@ const isStriped = (s: SpecialType) => s === SpecialType.StripedHorizontal || s =
  * chained detonation. Shared by every effect handler (DRY).
  */
 function consumeTile(tile: TileData, context: SpecialDetonationContext, affected: number[]): void {
-  if (tile.special === SpecialType.Rock || context.protectedTileIds?.has(tile.id)) return;
+  if (!isBlastTarget(tile) || context.protectedTileIds?.has(tile.id)) return;
   affected.push(tile.id);
   context.destroyedTileIds.add(tile.id);
-  if (tile.special !== SpecialType.None && tile.id !== context.sourceTile.id) {
+  if (context.board.canActivate(tile) && tile.id !== context.sourceTile.id) {
     context.triggerQueue.push(tile);
   }
 }
@@ -74,7 +76,7 @@ export class ColorBombHandler implements ISpecialEffectHandler {
 
     const affected: number[] = [];
     board.forEachTile((t) => {
-      if (t.color === targetColor) consumeTile(t, context, affected);
+      if (isCandy(t) && t.color === targetColor) consumeTile(t, context, affected);
     });
 
     return { sourceTile, affectedTileIds: affected, effectType: SpecialType.ColorBomb };
@@ -89,7 +91,7 @@ export class ColorBombHandler implements ISpecialEffectHandler {
 
     const colorCounts = new Map<TileColor, number>();
     context.board.forEachTile((t) => {
-      if (t.special === SpecialType.Rock || context.protectedTileIds?.has(t.id)) return;
+      if (!isCandy(t) || !isBlastTarget(t) || context.protectedTileIds?.has(t.id)) return;
       colorCounts.set(t.color, (colorCounts.get(t.color) || 0) + 1);
     });
 
@@ -107,11 +109,8 @@ export class ColorBombHandler implements ISpecialEffectHandler {
 
 export class AirplaneHandler implements ISpecialEffectHandler {
   public readonly supportedType = SpecialType.Airplane;
-  private readonly random: IRandomSource;
-
-  constructor(random: IRandomSource = new MathRandomSource()) {
-    this.random = random;
-  }
+  constructor(random: IRandomSource = new MathRandomSource(),
+    private readonly targets: IAirplaneTargetSelector = new AirplaneTargetSelector(random)) {}
 
   public execute(context: SpecialDetonationContext): SpecialTriggerEffect {
     const { board, sourceTile } = context;
@@ -140,30 +139,14 @@ export class AirplaneHandler implements ISpecialEffectHandler {
 
   private pickTarget({ board, sourceTile, destroyedTileIds, protectedTileIds }: SpecialDetonationContext): TileData | null {
     const candidates: TileData[] = [];
-    const specialCandidates: TileData[] = [];
 
     board.forEachTile((t) => {
       if (t.id === sourceTile.id || destroyedTileIds.has(t.id) || protectedTileIds?.has(t.id)) return;
-      if (t.special === SpecialType.Rock) return; // Rocks are unbreakable and never targeted
-      if (t.special !== SpecialType.None) {
-        specialCandidates.push(t);
-      } else {
-        candidates.push(t);
-      }
+      if (!isBlastTarget(t)) return; // Rocks are unbreakable and never targeted
+      candidates.push(t);
     });
 
-    // Strategy: prioritize existing specials to trigger chain reactions
-    if (specialCandidates.length > 0) {
-      const idx = this.random.nextInt(specialCandidates.length);
-      return specialCandidates[idx];
-    }
-
-    if (candidates.length > 0) {
-      const idx = this.random.nextInt(candidates.length);
-      return candidates[idx];
-    }
-
-    return null;
+    return this.targets.pick(board, candidates) ?? null;
   }
 }
 
@@ -177,7 +160,7 @@ export class DoubleColorBombComboHandler implements ISpecialComboHandler {
     destroyed.add(a.id);
     destroyed.add(b.id);
     board.forEachTile((t) => {
-      if (t.special !== SpecialType.Rock) destroyed.add(t.id);
+      if (isBlastTarget(t)) destroyed.add(t.id);
     });
     return {
       effects: [
@@ -217,7 +200,8 @@ export class ColorBombStripedComboHandler implements ISpecialComboHandler {
 
     const converted: TileData[] = [];
     board.forEachTile((t) => {
-      if (t.color === targetColor && t.special !== SpecialType.Rock && t.id !== striped.id && t.id !== bomb.id) {
+      if (isCandy(t) && t.color === targetColor && isBlastTarget(t) && t.id !== striped.id && t.id !== bomb.id) {
+        if ((board.getCell(t.row, t.col)?.ice ?? 0) > 0) { destroyed.add(t.id); return; }
         t.special =
           this.random.next() > 0.5 ? SpecialType.StripedHorizontal : SpecialType.StripedVertical;
         converted.push(t);
@@ -257,7 +241,8 @@ export class ColorBombAirplaneComboHandler implements ISpecialComboHandler {
 
     const converted: TileData[] = [];
     board.forEachTile((t) => {
-      if (t.color === targetColor && t.special !== SpecialType.Rock && t.id !== plane.id && t.id !== bomb.id) {
+      if (isCandy(t) && t.color === targetColor && isBlastTarget(t) && t.id !== plane.id && t.id !== bomb.id) {
+        if ((board.getCell(t.row, t.col)?.ice ?? 0) > 0) { destroyed.add(t.id); return; }
         t.special = SpecialType.Airplane;
         converted.push(t);
       }
@@ -292,10 +277,10 @@ export class ColorBombNormalComboHandler implements ISpecialComboHandler {
     const affected: number[] = [];
     const secondary: TileData[] = [];
     board.forEachTile((t) => {
-      if (t.color === targetColor && t.special !== SpecialType.Rock && t.id !== bomb.id) {
+      if (isCandy(t) && t.color === targetColor && isBlastTarget(t) && t.id !== bomb.id) {
         destroyed.add(t.id);
         affected.push(t.id);
-        if (t.special !== SpecialType.None) secondary.push(t);
+        if (board.canActivate(t)) secondary.push(t);
       }
     });
 
@@ -308,11 +293,8 @@ export class ColorBombNormalComboHandler implements ISpecialComboHandler {
 
 export class DoubleAirplaneComboHandler implements ISpecialComboHandler {
   public readonly name = 'DoubleAirplane';
-  private readonly random: IRandomSource;
-
-  constructor(random: IRandomSource = new MathRandomSource()) {
-    this.random = random;
-  }
+  constructor(random: IRandomSource = new MathRandomSource(),
+    private readonly targets: IAirplaneTargetSelector = new AirplaneTargetSelector(random)) {}
 
   public canHandle(a: TileData, b: TileData): boolean {
     return a.special === SpecialType.Airplane && b.special === SpecialType.Airplane;
@@ -328,10 +310,10 @@ export class DoubleAirplaneComboHandler implements ISpecialComboHandler {
     for (const source of [a, b]) {
       for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
         const n = board.get(source.row + dr, source.col + dc);
-        if (n && n.special !== SpecialType.Rock && !destroyed.has(n.id)) {
+        if (n && isBlastTarget(n) && !destroyed.has(n.id)) {
           destroyed.add(n.id);
           affected.push(n.id);
-          if (n.special !== SpecialType.None) secondary.push(n);
+          if (board.canActivate(n)) secondary.push(n);
         }
       }
     }
@@ -339,16 +321,16 @@ export class DoubleAirplaneComboHandler implements ISpecialComboHandler {
     // Pick 3 distinct targets across the board
     const candidates: TileData[] = [];
     board.forEachTile((t) => {
-      if (t.special !== SpecialType.Rock && !destroyed.has(t.id)) candidates.push(t);
+      if (isBlastTarget(t) && !destroyed.has(t.id)) candidates.push(t);
     });
 
     const targets: (Position & { id: number })[] = [];
     for (let i = 0; i < 3 && candidates.length > 0; i++) {
-      const idx = this.random.nextInt(candidates.length);
-      const target = candidates.splice(idx, 1)[0];
+      const target = this.targets.pick(board, candidates)!;
+      candidates.splice(candidates.indexOf(target), 1);
       destroyed.add(target.id);
       affected.push(target.id);
-      if (target.special !== SpecialType.None) secondary.push(target);
+      if (board.canActivate(target)) secondary.push(target);
       targets.push({ row: target.row, col: target.col, id: target.id });
     }
 
@@ -369,11 +351,8 @@ export class DoubleAirplaneComboHandler implements ISpecialComboHandler {
 
 export class AirplaneStripedComboHandler implements ISpecialComboHandler {
   public readonly name = 'AirplaneStriped';
-  private readonly random: IRandomSource;
-
-  constructor(random: IRandomSource = new MathRandomSource()) {
-    this.random = random;
-  }
+  constructor(random: IRandomSource = new MathRandomSource(),
+    private readonly targets: IAirplaneTargetSelector = new AirplaneTargetSelector(random)) {}
 
   public canHandle(a: TileData, b: TileData): boolean {
     return (
@@ -393,30 +372,27 @@ export class AirplaneStripedComboHandler implements ISpecialComboHandler {
 
     const candidates: TileData[] = [];
     board.forEachTile((t) => {
-      if (t.special !== SpecialType.Rock && !destroyed.has(t.id)) candidates.push(t);
+      if (isBlastTarget(t) && !destroyed.has(t.id)) candidates.push(t);
     });
 
-    let target: TileData | undefined;
-    if (candidates.length > 0) {
-      target = candidates[this.random.nextInt(candidates.length)];
-    }
+    const target = this.targets.pick(board, candidates);
 
     if (target) {
       // Cross laser beam at target!
       for (let c = 0; c < board.cols; c++) {
         const t = board.get(target.row, c);
-        if (t && t.special !== SpecialType.Rock && !destroyed.has(t.id)) {
+        if (t && isBlastTarget(t) && !destroyed.has(t.id)) {
           destroyed.add(t.id);
           affected.push(t.id);
-          if (t.special !== SpecialType.None) secondary.push(t);
+          if (board.canActivate(t)) secondary.push(t);
         }
       }
       for (let r = 0; r < board.rows; r++) {
         const t = board.get(r, target.col);
-        if (t && t.special !== SpecialType.Rock && !destroyed.has(t.id)) {
+        if (t && isBlastTarget(t) && !destroyed.has(t.id)) {
           destroyed.add(t.id);
           affected.push(t.id);
-          if (t.special !== SpecialType.None) secondary.push(t);
+          if (board.canActivate(t)) secondary.push(t);
         }
       }
     }
@@ -437,11 +413,8 @@ export class AirplaneStripedComboHandler implements ISpecialComboHandler {
 
 export class AirplaneWrappedComboHandler implements ISpecialComboHandler {
   public readonly name = 'AirplaneWrapped';
-  private readonly random: IRandomSource;
-
-  constructor(random: IRandomSource = new MathRandomSource()) {
-    this.random = random;
-  }
+  constructor(random: IRandomSource = new MathRandomSource(),
+    private readonly targets: IAirplaneTargetSelector = new AirplaneTargetSelector(random)) {}
 
   public canHandle(a: TileData, b: TileData): boolean {
     return (
@@ -461,23 +434,20 @@ export class AirplaneWrappedComboHandler implements ISpecialComboHandler {
 
     const candidates: TileData[] = [];
     board.forEachTile((t) => {
-      if (t.special !== SpecialType.Rock && !destroyed.has(t.id)) candidates.push(t);
+      if (isBlastTarget(t) && !destroyed.has(t.id)) candidates.push(t);
     });
 
-    let target: TileData | undefined;
-    if (candidates.length > 0) {
-      target = candidates[this.random.nextInt(candidates.length)];
-    }
+    const target = this.targets.pick(board, candidates);
 
     if (target) {
       // 3x3 blast at target!
       for (let r = target.row - 1; r <= target.row + 1; r++) {
         for (let c = target.col - 1; c <= target.col + 1; c++) {
           const t = board.get(r, c);
-          if (t && t.special !== SpecialType.Rock && !destroyed.has(t.id)) {
+          if (t && isBlastTarget(t) && !destroyed.has(t.id)) {
             destroyed.add(t.id);
             affected.push(t.id);
-            if (t.special !== SpecialType.None) secondary.push(t);
+            if (board.canActivate(t)) secondary.push(t);
           }
         }
       }
@@ -508,10 +478,10 @@ function destroyAndCollect(
   excludeB: number
 ): void {
   const t = board.get(r, c);
-  if (!t || t.special === SpecialType.Rock || destroyed.has(t.id)) return;
+  if (!t || !isBlastTarget(t) || destroyed.has(t.id)) return;
   destroyed.add(t.id);
   affected.push(t.id);
-  if (t.special !== SpecialType.None && t.id !== excludeA && t.id !== excludeB) {
+  if (board.canActivate(t) && t.id !== excludeA && t.id !== excludeB) {
     secondary.push(t);
   }
 }
@@ -602,8 +572,8 @@ export class SpecialRegistry implements ISpecialRegistry {
   private effectHandlers = new Map<SpecialType, ISpecialEffectHandler>();
   private comboHandlers: { handler: ISpecialComboHandler; priority: number }[] = [];
 
-  constructor(random: IRandomSource = new MathRandomSource()) {
-    this.registerDefaultHandlers(random);
+  constructor(random: IRandomSource = new MathRandomSource(), targets: IAirplaneTargetSelector = new AirplaneTargetSelector(random)) {
+    this.registerDefaultHandlers(random, targets);
   }
 
   public registerEffectHandler(handler: ISpecialEffectHandler): void {
@@ -623,20 +593,20 @@ export class SpecialRegistry implements ISpecialRegistry {
     return this.comboHandlers.find(({ handler }) => handler.canHandle(a, b))?.handler;
   }
 
-  private registerDefaultHandlers(random: IRandomSource): void {
+  private registerDefaultHandlers(random: IRandomSource, targets: IAirplaneTargetSelector): void {
     this.registerEffectHandler(new StripedHorizontalHandler());
     this.registerEffectHandler(new StripedVerticalHandler());
     this.registerEffectHandler(new WrappedHandler());
     this.registerEffectHandler(new ColorBombHandler());
-    this.registerEffectHandler(new AirplaneHandler(random));
+    this.registerEffectHandler(new AirplaneHandler(random, targets));
 
     // Priority ordering for combo matchers: most specific pairing first.
     this.registerComboHandler(new DoubleColorBombComboHandler());
     this.registerComboHandler(new ColorBombStripedComboHandler(random));
     this.registerComboHandler(new ColorBombAirplaneComboHandler());
-    this.registerComboHandler(new DoubleAirplaneComboHandler(random));
-    this.registerComboHandler(new AirplaneStripedComboHandler(random));
-    this.registerComboHandler(new AirplaneWrappedComboHandler(random));
+    this.registerComboHandler(new DoubleAirplaneComboHandler(random, targets));
+    this.registerComboHandler(new AirplaneStripedComboHandler(random, targets));
+    this.registerComboHandler(new AirplaneWrappedComboHandler(random, targets));
     this.registerComboHandler(new GiantCrossComboHandler());
     this.registerComboHandler(new GiantWrappedComboHandler());
     this.registerComboHandler(new CrossStripedComboHandler());

@@ -41,7 +41,7 @@ change browser language detection in the game.
 - Tap a special to activate it directly, or swap it with a neighbor to activate it.
 - Rocks cannot be swapped or activated and are immune to special blasts.
 - After ten seconds of inactivity, the game highlights a possible move.
-- Open **Settings** (gear) and use the language button, or press **L**, to change language. The browser language is used initially;
+- Open **Settings** (gear) and use the language selector, or press **L**, to change language. The selector shows the current language. The browser language is used initially;
   unsupported languages fall back to English. Explicit choices are remembered.
 - **New Game** starts a fresh run after confirmation; it preserves the old checkpoint in a recovery archive.
 
@@ -86,9 +86,13 @@ ties use deterministic scan order (horizontal before vertical; squares top-left 
 - A compact checkpoint indicator stays visible; full save details are available in
   Settings. Storage/recovery warnings remain visible beside the game. Saving still
   happens only after a completed level, never during a level.
+- Best level cleared and best total score appear beneath the run totals. These lifetime
+  records update only at level completion, survive New Game, and start from an existing
+  completed checkpoint when upgrading. Clearing browser site data removes them.
 - CSS owns the board region, using dynamic viewport units and safe-area insets.
   Pixi measures that region via ResizeObserver; canvas/grid resizing is deferred until
   turn playback settles. Extremely short windows can scroll instead of clipping controls.
+  In short landscape layouts the board stays visible while the objective sidebar scrolls.
 - Controls have at least 44px touch targets. Long labels and large scores can wrap;
   the board retains square cells and correct input coordinates at every size.
 
@@ -100,6 +104,10 @@ wide desktop, and short landscape, including bonus-phase badges and the settings
 - Striped: clears its row or column.
 - Wrapped: clears a 3×3 area.
 - Airplane: clears takeoff neighbors and flies to a target.
+  Every airplane variant randomly prefers tiles that help unfinished objectives:
+  jelly, ice/blockers, required colors, or tiles below cherries in the same gravity
+  segment. Ingredients and rocks are never direct targets. With no useful target,
+  planes favor activatable specials, then other eligible tiles. Targeting uses the seeded RNG.
 - Color bomb: clears the matched or swapped color; a blast without color context
   selects the most abundant color.
 
@@ -124,7 +132,8 @@ chain, except partners explicitly detonated by a conversion combo.
 
 ## Endless progression and bonus play
 
-Levels repeat a four-tier cycle:
+Move/shuffle budgets repeat a four-tier difficulty cycle. Every newly generated level
+requires its minimum score **and all additional board objectives**:
 
 1. Easy: 26 base moves, 3,500 initial target, four rescue shuffles.
 2. Medium: 22 base moves, 5,600 initial target, three rescue shuffles.
@@ -135,24 +144,68 @@ Each subsequent four-level cycle multiplies targets by 1.25, rounded to the near
 Configuration lives in `DEFAULT_ALTERNATING_TUNING` and `DEFAULT_DIFFICULTY_PRESETS`
 in `src/core/LevelProgression.ts`.
 
-Reaching the target starts the **bonus phase**; it does not immediately open the victory
+Completing every level objective starts the **bonus phase**; it does not immediately open the victory
 modal. Further moves stop consuming the move budget. Bonus refills favor colors that
 avoid new matches and gradually introduce rocks: a 35% roll for an eligible empty cell,
 at most two rocks per refill wave and at most one newly spawned rock per column per wave.
 Bonus refills avoid both lines and squares when an allowed color is available,
 including squares containing existing specials.
+The persistent **Bonus round** banner explains the frozen moves, extra scoring, and
+why play continues. It disappears when the next level starts.
 
 When no legal swap or direct special activation remains during bonus play, the level
 ends in victory. The next level receives its base moves plus all unused moves from
 the previous level. Level score resets; global score continues accumulating.
 Restarting after a loss resets the run, global score, and carried moves.
 
-Before reaching the target, the run ends if the move budget expires or a deadlock cannot
+Before completing all objectives, the run ends if the move budget expires or a deadlock cannot
 be rescued. A deadlock spends one rescue shuffle; exhausted rescues or a failed shuffle
 end the run. Each level grants at least one rescue. Opening-board reshuffling is free.
 
 Deadlock frequency depends on board rules, player choices, and the current phase.
 Earlier measurements from older rules are not estimates for the current game.
+
+## Level objectives and board features
+
+Level 1 teaches scoring. Levels 2–10 introduce color collection, jelly, ice,
+frosting, crates, shaped boards, cherries, chocolate, and mixed objectives, in that
+order. Level 11 returns to scoring. These ten families then repeat with rotating
+colors and notched, bridge, or separated-island layouts. Feature targets and blocker
+counts remain bounded; difficulty budgets and banked moves still apply.
+
+- **Objectives:** all counters must finish before bonus play. Score contributes to
+  the global total on every level. Neither minimum score nor a collection/delivery
+  goal can substitute for the other. The score header shows the minimum; goal cards
+  show additional requirements. Removed candies and candies used to create a special count once by color.
+- **Jelly:** pink cell outlines stay in place. Clearing or matching the candy on
+  that cell removes a layer, including when it evolves into a special. A cherry
+  delivery alone does not remove jelly.
+- **Ice:** cell-anchored shells lock candies against swapping, matching, activation,
+  gravity, and shuffling. Nearby candy clears or direct blasts remove one layer per
+  cascade pass. The candy survives the hit that thaws it.
+- **Frosting / crates:** fixed blockers start with two/three layers, shown as dots.
+  Orthogonally adjacent candy clears or direct special hits remove one layer per
+  pass, regardless of how many simultaneous hits occur. Removal opens their cell.
+- **Shapes:** holes are not empty cells. Matches cannot bridge them; gravity stops
+  at gaps, ice, and fixed blockers. Each vertical segment refills independently.
+  Internal refills fade in locally rather than crossing occupied cells or holes.
+- **Cherries:** movable, non-matching ingredients cannot activate or be destroyed or
+  converted by specials. Swaps still need a candy match or a special activation.
+  Gravity carries cherries to green arrow exits at the bottom of playable segments;
+  each delivered cherry counts once and is not respawned. Shuffling preserves them.
+- **Chocolate:** one eligible neighboring plain candy is replaced after a valid turn
+  unless any chocolate was removed during that turn's cascades. It cannot cross
+  gaps or overwrite ice, exits, blockers, ingredients, or special candies. Rejected
+  swaps and rescue shuffles do not cause growth. Clearing all chocolate stops it.
+
+The HUD displays localized goals and a context hint. **Settings → Board guide**
+explains the markings. Goal cards wrap on phones and scale with the desktop sidebar;
+small/short windows can scroll instead of hiding controls.
+
+For isolated local QA, development builds accept `?practiceLevel=2` through
+`?practiceLevel=100` (for example `http://127.0.0.1:3000/?practiceLevel=10`).
+Practice uses seed 20 and an in-memory store, never the player's localStorage save.
+The practice entry point is excluded from production builds. Reload resets practice.
 
 ## Saved progress
 
@@ -169,6 +222,9 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
 ## Architecture and extension points
 
 - `Board`: grid state and tile identity.
+- `BoardFeatures`, `LevelBoardSetup`: playable-cell topology and authored object placement.
+- `TerrainResolver`: layered damage, jelly removal, and once-per-turn chocolate growth.
+- `ObjectiveTracker`: event-based objective counters independent of scoring.
 - `BoardInitializer`: initial generation without existing line or square matches.
 - `MatchDetector` and `IMatchRule`: run scanning and prioritized match recognition.
 - `CascadeResolver`: match evolution, detonation, gravity, refill, and score events.
@@ -193,6 +249,7 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
   through a read-only callback, without importing input-controller code.
 - `GameDebugController`: optional overlay and browser debug API.
 - `LanguageService` / `LanguageControls`: typed EN/ES dictionaries, preferences and DOM controls.
+- `ObjectivesView`, `TerrainView`, `FeatureAssets`: responsive counters and resolution-independent board markings.
 - `SaveCodec` / `SaveStore`: validated, versioned checkpoints and browser-storage policy.
 - `Game`: constructs and connects these services, binds session events, and handles layout.
 

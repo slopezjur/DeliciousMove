@@ -21,7 +21,7 @@ export class SquareAirplaneRule implements IMatchRule {
 
         // Colored specials match like ordinary candies; rocks never participate.
         const squareTiles: TileData[] = [t0, t1, t2, t3];
-        if (squareTiles.some(tile => tile.special === SpecialType.Rock)) continue;
+        if (squareTiles.some(tile => !board.canMatch(tile))) continue;
 
         // Check 2x2 color identity
         if (t0.color === t1.color && t0.color === t2.color && t0.color === t3.color) {

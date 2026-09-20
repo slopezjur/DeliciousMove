@@ -16,6 +16,7 @@ export class BoardGravitySystem implements IGravitySystem {
     for (let c = 0; c < board.cols; c++) {
       let emptyRow = board.rows - 1;
       for (let r = board.rows - 1; r >= 0; r--) {
+        if (board.isGravityBarrier(r, c)) { emptyRow = r - 1; continue; }
         const tile = board.get(r, c);
         if (tile !== null) {
           if (r !== emptyRow) {

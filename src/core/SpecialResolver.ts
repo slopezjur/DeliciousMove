@@ -1,6 +1,7 @@
 import { Board } from './Board.ts';
 import { TileData, Position, SpecialType, TileColor } from './TileTypes.ts';
 import { SpecialRegistry } from './specials/SpecialRegistry.ts';
+import { isCandy } from './BoardFeatures.ts';
 import type { SpecialTriggerEffect, ISpecialRegistry } from './specials/ISpecialHandler.ts';
 
 export type { SpecialTriggerEffect };
@@ -52,7 +53,7 @@ export class SpecialResolver implements ISpecialResolver {
     const tileA = board.get(posA.row, posA.col);
     const tileB = board.get(posB.row, posB.col);
 
-    if (!tileA || !tileB || tileA.special === SpecialType.Rock || tileB.special === SpecialType.Rock) {
+    if (!tileA || !tileB || !isCandy(tileA) || !isCandy(tileB) || !board.canSwap(posA) || !board.canSwap(posB)) {
       return { executed: false, effects: [], destroyedTileIds: new Set() };
     }
 
@@ -98,7 +99,8 @@ export class SpecialResolver implements ISpecialResolver {
 
     while (queue.length > 0) {
       const { tile, triggerColor } = queue.shift()!;
-      if (tile.special === SpecialType.Rock || tile.special === SpecialType.None) continue;
+      if (!isCandy(tile) || tile.special === SpecialType.Rock || tile.special === SpecialType.None
+        || (board.getCell(tile.row, tile.col)?.ice ?? 0) > 0) continue;
       // An all-special match may replace one old special with a new one at the
       // same ID. Its copied original still fires, while the new board tile cannot.
       if (options.protectedTileIds?.has(tile.id) && board.get(tile.row, tile.col) === tile) continue;

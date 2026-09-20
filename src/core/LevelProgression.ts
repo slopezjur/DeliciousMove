@@ -1,3 +1,6 @@
+import { LevelFeatures, Objective } from './BoardFeatures.ts';
+import { getLevelFeatures } from './LevelFeatures.ts';
+
 export enum LevelDifficulty {
   Easy = 'easy',
   Medium = 'medium',
@@ -6,6 +9,8 @@ export enum LevelDifficulty {
 }
 
 export interface LevelConfig {
+  objectives?: Objective[];
+  features?: LevelFeatures;
   level: number;
   difficulty: LevelDifficulty;
   moves: number;
@@ -91,8 +96,11 @@ export class InfiniteLevelProgression implements ILevelProgression {
     const cycleGrowth = Math.pow(this.tuning.cycleGrowthRate, cycle);
     const rawTarget = this.tuning.baseTargetScore * preset.targetMultiplier * cycleGrowth;
     const targetScore = Math.round(rawTarget / this.tuning.targetRounding) * this.tuning.targetRounding;
+    const family = getLevelFeatures(clampedLevel);
 
     return {
+      ...family,
+      objectives: [{ kind: 'score', target: targetScore }, ...(family.objectives ?? [])],
       level: clampedLevel,
       difficulty,
       moves: preset.baseMoves,

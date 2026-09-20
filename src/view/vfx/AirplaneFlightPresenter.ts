@@ -1,4 +1,4 @@
-import { SpecialType } from '../../core/TileTypes.ts';
+import { SpecialType, TileColor } from '../../core/TileTypes.ts';
 import { ComboEffectType, SpecialTriggerEffect } from '../../core/specials/ISpecialHandler.ts';
 import { EffectPresentationContext, IEffectPresenter } from './IEffectPresenter.ts';
 
@@ -75,7 +75,7 @@ export class AirplaneFlightPresenter implements IEffectPresenter {
       ctx.sound.playBombExplosion();
     } else {
       ctx.boardView.vfx.createShockwave(target.x, target.y, ctx.boardView.tileSize * 1.8);
-      ctx.boardView.vfx.createParticleBurst(target.x, target.y, 0x00e5ff as any);
+      ctx.boardView.vfx.createParticleBurst(target.x, target.y, TileColor.Blue);
       ctx.sound.playBombExplosion();
     }
   }

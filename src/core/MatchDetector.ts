@@ -1,5 +1,5 @@
 import { Board } from './Board.ts';
-import { TileData, TileColor, Position, MatchGroup, SpecialType } from './TileTypes.ts';
+import { TileData, TileColor, Position, MatchGroup } from './TileTypes.ts';
 import { MatchRuleRegistry } from './matching/MatchRuleRegistry.ts';
 import { IMatchRuleRegistry } from './matching/IMatchRule.ts';
 
@@ -87,7 +87,7 @@ export class MatchDetector implements IMatchDetector {
       for (let cell = 0; cell < cellCount; cell++) {
         const tile = isHorizontal ? board.get(line, cell) : board.get(cell, line);
 
-        if (!tile || tile.special === SpecialType.Rock) {
+        if (!tile || !board.canMatch(tile)) {
           flush();
           currentRun = [];
           continue;

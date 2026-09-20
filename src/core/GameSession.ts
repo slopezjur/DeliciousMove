@@ -4,6 +4,8 @@ import {
   LevelConfig,
   LevelDifficulty,
 } from './LevelProgression.ts';
+import { ObjectiveEvent, ObjectiveProgress } from './BoardFeatures.ts';
+import { ObjectiveTracker } from './ObjectiveTracker.ts';
 
 export enum GameState {
   Ready = 'ready',
@@ -19,6 +21,7 @@ export enum GameOverReason {
 
 /** Immutable view of the session handed to listeners on every state transition. */
 export interface SessionSnapshot {
+  objectives?: ObjectiveProgress[];
   level: number;
   score: number;
   targetScore: number;
@@ -33,6 +36,7 @@ export interface SessionSnapshot {
 }
 
 export interface GameSessionListener {
+  onObjectivesUpdated?: (objectives: ObjectiveProgress[]) => void;
   onLevelStarted?: (config: LevelConfig) => void;
   onScoreUpdated?: (currentScore: number, added: number, globalScore: number, isBonusPhase: boolean) => void;
   onMovesUpdated?: (movesLeft: number, isFrozen?: boolean) => void;
@@ -41,6 +45,7 @@ export interface GameSessionListener {
 }
 
 export interface SessionSaveState {
+  objectiveProgress?: number[];
   config: LevelConfig;
   score: number;
   globalScore: number;
@@ -52,6 +57,8 @@ export interface SessionSaveState {
 }
 
 export interface IGameSession {
+  recordObjectiveEvents?(events: readonly ObjectiveEvent[]): void;
+  getObjectives?(): ObjectiveProgress[];
   exportState(): SessionSaveState;
   restore(saved: SessionSaveState): void;
   addListener(listener: GameSessionListener): () => void;
@@ -84,6 +91,7 @@ export class GameSession implements IGameSession {
   private readonly progression: ILevelProgression;
 
   private config: LevelConfig;
+  private objectives: ObjectiveTracker;
   private currentScore: number = 0;
   private globalScore: number = 0;
   private movesLeft: number;
@@ -96,6 +104,7 @@ export class GameSession implements IGameSession {
   constructor(progression: ILevelProgression = new InfiniteLevelProgression(), startLevel = 1) {
     this.progression = progression;
     this.config = this.progression.getConfig(startLevel);
+    this.objectives = this.createObjectives();
     this.movesLeft = this.config.moves;
     this.shufflesLeft = this.config.shuffles;
   }
@@ -103,6 +112,7 @@ export class GameSession implements IGameSession {
   public exportState(): SessionSaveState {
     if (this.state === GameState.Resolving) throw new Error('Cannot save an unfinished turn.');
     return {
+      objectiveProgress: this.getObjectives().map(p => p.current),
       config: { ...this.config }, score: this.currentScore, globalScore: this.globalScore,
       movesLeft: this.movesLeft, shufflesLeft: this.shufflesLeft,
       accumulatedMoves: this.accumulatedMoves, state: this.state, reason: this.gameOverReason,
@@ -112,6 +122,7 @@ export class GameSession implements IGameSession {
   /** Restore silently; the application rebuilds presentation without starting a new level. */
   public restore(saved: SessionSaveState): void {
     this.config = { ...saved.config };
+    this.objectives = this.createObjectives(saved.objectiveProgress);
     this.currentScore = saved.score;
     this.globalScore = saved.globalScore;
     this.movesLeft = saved.movesLeft;
@@ -143,6 +154,7 @@ export class GameSession implements IGameSession {
 
   public startLevel(level: number, carriedMoves: number = 0): void {
     this.config = this.progression.getConfig(level);
+    this.objectives = this.createObjectives();
     this.currentScore = 0;
     this.accumulatedMoves = carriedMoves;
     this.movesLeft = this.config.moves + carriedMoves;
@@ -154,6 +166,21 @@ export class GameSession implements IGameSession {
     this.notifyScore(0);
     this.notifyMoves();
     this.notifyShuffles();
+    this.notifyObjectives();
+  }
+
+  private createObjectives(restored?: readonly number[]): ObjectiveTracker {
+    return new ObjectiveTracker(this.config.objectives ?? [{ kind: 'score', target: this.config.targetScore }], restored);
+  }
+  public getObjectives(): ObjectiveProgress[] { return this.objectives.snapshot(this.currentScore); }
+  public recordObjectiveEvents(events: readonly ObjectiveEvent[]): void {
+    this.objectives.record(events);
+    this.notifyObjectives();
+    this.notifyMoves();
+  }
+  private notifyObjectives(): void {
+    const progress = this.getObjectives();
+    this.listeners.forEach(listener => listener.onObjectivesUpdated?.(progress));
   }
 
   public getLevelConfig(): LevelConfig {
@@ -189,7 +216,7 @@ export class GameSession implements IGameSession {
   }
 
   public isTargetReached(): boolean {
-    return this.currentScore >= this.config.targetScore;
+    return this.objectives.complete(this.currentScore);
   }
 
   public isBonusPhase(): boolean {
@@ -197,6 +224,7 @@ export class GameSession implements IGameSession {
   }
 
   public completeWithVictory(): GameState {
+    if (!this.isTargetReached() || this.state === GameState.GameOver) return this.state;
     this.setState(GameState.Victory);
     return this.state;
   }
@@ -211,6 +239,7 @@ export class GameSession implements IGameSession {
 
   public getSnapshot(): SessionSnapshot {
     return {
+      objectives: this.getObjectives(),
       level: this.config.level,
       score: this.currentScore,
       targetScore: this.config.targetScore,
@@ -244,6 +273,7 @@ export class GameSession implements IGameSession {
     this.currentScore += points;
     this.globalScore += points;
     this.notifyScore(points);
+    this.notifyObjectives();
   }
 
   /**

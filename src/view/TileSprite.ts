@@ -1,6 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
 import { TileData } from '../core/TileTypes.ts';
-import { AssetFactory } from './AssetFactory.ts';
+import { FeatureAssets } from './FeatureAssets.ts';
 
 export class TileSprite extends Container {
   public tileData: TileData;
@@ -14,7 +14,7 @@ export class TileSprite extends Container {
     this.tileSize = tileSize;
 
     // Candy vector graphic using shared GraphicsContext
-    this.graphic = new Graphics(AssetFactory.getCandyContext(tileData.color, tileData.special));
+    this.graphic = new Graphics(FeatureAssets.forTile(tileData));
     const scale = (tileSize * 0.88) / 88;
     this.graphic.scale.set(scale);
     this.addChild(this.graphic);
@@ -39,7 +39,7 @@ export class TileSprite extends Container {
   }
 
   public updateTexture(): void {
-    this.graphic.context = AssetFactory.getCandyContext(this.tileData.color, this.tileData.special);
+    this.graphic.context = FeatureAssets.forTile(this.tileData);
   }
 
   public setSelected(selected: boolean): void {

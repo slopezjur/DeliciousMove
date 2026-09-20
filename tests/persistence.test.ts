@@ -3,7 +3,7 @@ import { Board } from '../src/core/Board.ts';
 import { BoardInitializer } from '../src/core/BoardInitializer.ts';
 import { GameSession, GameState, GameOverReason } from '../src/core/GameSession.ts';
 import { SeededRandomSource } from '../src/core/random/IRandomSource.ts';
-import { SaveCodec, GameSave, SaveError } from '../src/persistence/SaveCodec.ts';
+import { SaveCodec, GameSave, SaveError, SAVE_SCHEMA_VERSION, GAME_RULES_VERSION } from '../src/persistence/SaveCodec.ts';
 import { SaveStore, SAVE_KEY, BACKUP_KEY } from '../src/persistence/SaveStore.ts';
 import { IStorage } from '../src/persistence/Storage.ts';
 
@@ -22,9 +22,14 @@ function fixture(): GameSave {
   session.onMoveInitiated();
   session.addPoints(1200);
   session.onTurnCompleted();
+  // These baseline persistence tests exercise the original score-only contract.
+  const state = session.exportState();
+  delete state.config.objectives;
+  delete state.config.features;
+  delete state.objectiveProgress;
   return {
-    schemaVersion: 1, rulesVersion: 1, savedAt: '2026-09-20T12:00:00.000Z',
-    board: board.getSnapshot(), session: session.exportState(), random: random.getSnapshot(),
+    schemaVersion: SAVE_SCHEMA_VERSION, rulesVersion: GAME_RULES_VERSION, savedAt: '2026-09-20T12:00:00.000Z',
+    board: board.getSnapshot(), session: state, random: random.getSnapshot(),
   };
 }
 
@@ -36,7 +41,7 @@ describe('versioned saves', () => {
     const board = new Board(8, 8), session = new GameSession(), random = new SeededRandomSource();
     board.restore(saved.board); session.restore(saved.session); random.restore(saved.random);
     expect(board.getSnapshot()).toEqual(original.board);
-    expect(session.exportState()).toEqual(original.session);
+    expect(session.exportState()).toEqual({ ...original.session, objectiveProgress: [original.session.score] });
     const expectedRandom = new SeededRandomSource();
     expectedRandom.restore(original.random);
     expect(Array.from({ length: 30 }, () => random.next())).toEqual(
@@ -77,6 +82,7 @@ describe('versioned saves', () => {
 
   it('runs schema and rules migrations sequentially on independent data', () => {
     const original = fixture();
+    original.schemaVersion = 1; original.rulesVersion = 1;
     const calls: string[] = [];
     const codec = new SaveCodec(
       new Map([
@@ -188,7 +194,7 @@ describe('local save protection', () => {
 
   it('does not use an old backup to downgrade a save from a newer game', () => {
     const storage = new MemoryStorage();
-    storage.setItem(SAVE_KEY, JSON.stringify({ ...completedFixture(), rulesVersion: 2 }));
+    storage.setItem(SAVE_KEY, JSON.stringify({ ...completedFixture(), rulesVersion: GAME_RULES_VERSION + 1 }));
     storage.setItem(BACKUP_KEY, JSON.stringify(completedFixture()));
     const store = new SaveStore(storage);
     expect(store.load()).toBeNull();

@@ -5,7 +5,10 @@ export class LanguageControls {
   constructor(private readonly language: LanguageService, onLayoutChanged: () => void) {
     this.render();
     language.subscribe(() => { this.render(); onLayoutChanged(); });
-    document.getElementById('language-toggle-btn')?.addEventListener('click', () => language.toggle());
+    document.getElementById('language-select')?.addEventListener('change', event => {
+      const value = (event.target as HTMLSelectElement).value;
+      if (value === 'en' || value === 'es') language.setLocale(value);
+    });
     window.addEventListener('keydown', (event) => {
       const target = event.target;
       if (event.repeat || event.altKey || event.ctrlKey || event.metaKey
@@ -28,14 +31,11 @@ export class LanguageControls {
       const key = element.dataset.i18nTitle!;
       if (this.language.isKey(key)) element.title = this.language.t(key);
     }
-    const button = document.getElementById('language-toggle-btn');
+    const selector = document.getElementById('language-select') as HTMLSelectElement | null;
     for (const element of document.querySelectorAll<HTMLElement>('[data-i18n-aria-label]')) {
       const key = element.dataset.i18nAriaLabel!;
       if (this.language.isKey(key)) element.setAttribute('aria-label', this.language.t(key));
     }
-    if (button) {
-      button.textContent = this.language.locale === 'en' ? 'Español' : 'English';
-      button.setAttribute('aria-label', this.language.t('languageTip'));
-    }
+    if (selector) selector.value = this.language.locale;
   }
 }

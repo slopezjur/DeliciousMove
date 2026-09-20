@@ -32,14 +32,20 @@
                 <span class="hud-label" data-i18n="score">Score</span>
                 <strong id="score-value" class="progress-num">0</strong>
               </div>
-              <div class="target-box">
+              <div class="target-box" id="score-target-box">
                 <span class="hud-label" data-i18n="target">Min Target</span>
                 <strong id="target-value" class="progress-num">4,000</strong>
               </div>
             </div>
             <div class="progress-track"><div id="progress-fill"></div></div>
-            <div data-i18n="bonus" id="bonus-phase-indicator" class="bonus-phase-badge hidden">BONUS PHASE ❄️</div>
           </div>
+          <p id="objectives-instruction" class="feature-hint hidden" data-i18n="allRequired"></p>
+          <div id="objectives-list" class="objective-list hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+          <aside id="bonus-phase-indicator" class="bonus-round-banner hidden" role="status" aria-live="polite">
+            <strong data-i18n="bonus">BONUS ROUND</strong>
+            <p data-i18n="bonusExplanation"></p>
+          </aside>
+          <p id="level-feature-hint" class="feature-hint hidden"></p>
         </section>
         <footer class="run-summary">
           <div class="secondary-stats">
@@ -52,6 +58,11 @@
               <span id="shuffles-value" class="hud-value">4</span>
             </div>
           </div>
+          <div class="personal-records" data-i18n-title="recordsTip">
+            <div class="summary-stat"><span class="hud-label" data-i18n="bestLevel">Best level cleared</span><strong id="best-level-value">0</strong></div>
+            <div class="summary-stat"><span class="hud-label" data-i18n="bestScore">Best total score</span><strong id="best-score-value">0</strong></div>
+          </div>
+          <p id="records-status" class="records-warning hidden" role="status"></p>
           <div id="save-status" role="status" aria-live="polite"></div>
         </footer>
       </header>
@@ -62,14 +73,26 @@
           <button id="settings-close-btn" class="icon-button" data-i18n-aria-label="close">✕</button>
         </div>
         <div class="settings-row">
-          <span data-i18n="language">Language</span>
-          <button id="language-toggle-btn" data-i18n-title="languageTip">Español</button>
+          <label for="language-select" data-i18n="language">Language</label>
+          <select id="language-select" data-i18n-title="languageTip">
+            <option value="en" lang="en">English</option>
+            <option value="es" lang="es">Español</option>
+          </select>
         </div>
         <div class="settings-row">
           <span data-i18n="sound">Sound</span>
           <button id="sound-toggle-btn" data-i18n-title="soundTip">On</button>
         </div>
         <p id="save-detail"></p>
+        <details class="feature-help">
+          <summary data-i18n="featureHelp">Board guide</summary>
+          <p data-i18n="hintJelly"></p>
+          <p data-i18n="hintIce"></p>
+          <p data-i18n="hintBlockers"></p>
+          <p data-i18n="hintShape"></p>
+          <p data-i18n="hintIngredients"></p>
+          <p data-i18n="hintChocolate"></p>
+        </details>
         <div class="settings-actions">
           <button id="debug-toggle-btn" data-i18n="diagnostics">🐞 Game Diagnostics &amp; Telemetry</button>
           <button id="new-game-btn" data-i18n="newGame">New Game</button>

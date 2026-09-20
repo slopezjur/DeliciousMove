@@ -57,7 +57,7 @@ export class TurnCoordinator implements ITurnCoordinator {
     if (!tileA || !tileB) return false;
 
     // Rocks are completely static obstacles: swapping with a rock is forbidden
-    if (tileA.special === SpecialType.Rock || tileB.special === SpecialType.Rock) {
+    if (!this.board.canSwap(from) || !this.board.canSwap(to)) {
       const candy = tileA.special === SpecialType.Rock ? tileB : tileA;
       if (candy.special !== SpecialType.Rock) {
         await this.animations.animateForbiddenMove?.(candy.id);
@@ -88,7 +88,10 @@ export class TurnCoordinator implements ITurnCoordinator {
     // 2. Valid move: charge it and play out the cascade.
     const scoreBefore = this.session.getScore();
     this.session.onMoveInitiated();
-    await this.animations.playCascadeSteps(result.steps, (gained) => this.session.addPoints(gained));
+    await this.animations.playCascadeSteps(result.steps, (gained, events) => {
+      this.session.addPoints(gained);
+      this.session.recordObjectiveEvents?.(events ?? []);
+    });
     const scoreGained = this.session.getScore() - scoreBefore;
 
     const specialsFormed = result.steps.flatMap((s) => s.evolutions?.map((e) => e.specialTile.special) ?? []);
@@ -109,7 +112,7 @@ export class TurnCoordinator implements ITurnCoordinator {
     if (!this.session.canMakeMove()) return false;
 
     const tile = this.board.get(pos.row, pos.col);
-    if (!tile || tile.special === SpecialType.None || tile.special === SpecialType.Rock) return false;
+    if (!tile || !this.board.canActivate(pos)) return false;
 
     const boardBefore = this.board.getSnapshot();
     const sessionBefore = this.session.getSnapshot();
@@ -125,7 +128,10 @@ export class TurnCoordinator implements ITurnCoordinator {
 
     const scoreBefore = this.session.getScore();
     this.session.onMoveInitiated();
-    await this.animations.playCascadeSteps(result.steps, (gained) => this.session.addPoints(gained));
+    await this.animations.playCascadeSteps(result.steps, (gained, events) => {
+      this.session.addPoints(gained);
+      this.session.recordObjectiveEvents?.(events ?? []);
+    });
     const scoreGained = this.session.getScore() - scoreBefore;
 
     const specialsTriggered = result.steps.flatMap((s) => s.triggeredSpecials?.map((t) => t.effectType) ?? []);

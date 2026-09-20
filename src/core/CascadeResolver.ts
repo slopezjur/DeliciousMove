@@ -1,6 +1,7 @@
 import { Board } from './Board.ts';
 import { IMatchDetector, MatchDetector } from './MatchDetector.ts';
 import { isProductiveColorSwap } from './matching/MatchEligibility.ts';
+import { TerrainResolver } from './TerrainResolver.ts';
 import {
   ISpecialResolver,
   SpecialResolver,
@@ -46,7 +47,8 @@ export class CascadeResolver implements ICascadeResolver {
     gravitySystem: IGravitySystem = new BoardGravitySystem(),
     tileSpawner: ITileSpawner = new TileSpawner(),
     matchDetector: IMatchDetector = new MatchDetector(),
-    specialResolver: ISpecialResolver = new SpecialResolver()
+    specialResolver: ISpecialResolver = new SpecialResolver(),
+    private readonly terrain: TerrainResolver = new TerrainResolver()
   ) {
     this.scoreCalculator = scoreCalculator;
     this.gravitySystem = gravitySystem;
@@ -60,7 +62,7 @@ export class CascadeResolver implements ICascadeResolver {
    */
   public resolveActivation(board: Board, pos: Position, avoidMatches = false): SwapResult {
     const tile = board.get(pos.row, pos.col);
-    if (!tile || tile.special === SpecialType.None || tile.special === SpecialType.Rock) {
+    if (!tile || !board.canActivate(pos)) {
       return { valid: false, steps: [] };
     }
 
@@ -73,7 +75,7 @@ export class CascadeResolver implements ICascadeResolver {
       this.executeDestroyAndCollapse(board, destroyedTileIds, [], [], effects, 1, avoidMatches)
     );
     this.continueCascades(board, steps, 2, avoidMatches);
-    return { valid: true, steps };
+    return this.finishTurn(board, steps);
   }
 
   /**
@@ -92,7 +94,7 @@ export class CascadeResolver implements ICascadeResolver {
     }
 
     // Rocks are completely static obstacles: swaps involving rocks are invalid at the model level
-    if (tileA.special === SpecialType.Rock || tileB.special === SpecialType.Rock) {
+    if (!board.canSwap(posA) || !board.canSwap(posB)) {
       return { valid: false, steps: [] };
     }
 
@@ -108,7 +110,7 @@ export class CascadeResolver implements ICascadeResolver {
         this.executeDestroyAndCollapse(board, specialCombo.destroyedTileIds, [], [], specialCombo.effects, 1, avoidMatches)
       );
       this.continueCascades(board, steps, 2, avoidMatches);
-      return { valid: true, steps };
+      return this.finishTurn(board, steps);
     }
 
     const swappedA = board.get(posA.row, posA.col)!;
@@ -138,7 +140,7 @@ export class CascadeResolver implements ICascadeResolver {
         this.executeDestroyAndCollapse(board, destroyedTileIds, [], [], effects, 1, avoidMatches)
       );
       this.continueCascades(board, steps, 2, avoidMatches);
-      return { valid: true, steps };
+      return this.finishTurn(board, steps);
     }
 
     // 4. Otherwise process matches, also including any swapped specials that were not in match groups
@@ -154,6 +156,12 @@ export class CascadeResolver implements ICascadeResolver {
       this.continueCascades(board, steps, 2, avoidMatches);
     }
 
+    return this.finishTurn(board, steps);
+  }
+
+  private finishTurn(board: Board, steps: CascadeStep[]): SwapResult {
+    const growth = this.terrain.spread(board, steps);
+    if (growth) steps.push(growth);
     return { valid: true, steps };
   }
 
@@ -162,6 +170,14 @@ export class CascadeResolver implements ICascadeResolver {
     let iteration = 0;
 
     while (iteration++ < MAX_CASCADE_ITERATIONS) {
+      const deliveries = new Set<number>();
+      board.forEachTile(tile => {
+        if (tile.kind === 'ingredient' && board.getCell(tile.row, tile.col)?.exit) deliveries.add(tile.id);
+      });
+      if (deliveries.size > 0) {
+        steps.push(this.executeDestroyAndCollapse(board, new Set(), [], [], [], combo, avoidMatches, [], deliveries));
+        continue;
+      }
       const step = this.processMatchPass(board, [], combo, [], avoidMatches);
       if (!step) break;
       steps.push(step);
@@ -178,6 +194,7 @@ export class CascadeResolver implements ICascadeResolver {
   ): CascadeStep | null {
     const matchGroups = this.matchDetector.detectMatches(board, interactionPositions);
     if (matchGroups.length === 0 && additionalSpecials.length === 0) return null;
+    const matchedTiles = structuredClone(matchGroups.flatMap(group => group.tiles));
 
     const destroyedIds = new Set<number>();
     const spawnedSpecials: TileData[] = [];
@@ -248,7 +265,8 @@ export class CascadeResolver implements ICascadeResolver {
       evolutions,
       triggeredEffects,
       multiplier,
-      avoidMatches
+      avoidMatches,
+      matchedTiles
     );
   }
 
@@ -262,10 +280,17 @@ export class CascadeResolver implements ICascadeResolver {
     evolutions: SpecialEvolution[],
     triggeredEffects: SpecialTriggerEffect[],
     multiplier: number,
-    avoidMatches = false
+    avoidMatches = false,
+    matchedTiles: TileData[] = [],
+    deliveries: ReadonlySet<number> = new Set()
   ): CascadeStep {
     // Capture blast origins before gravity can move any surviving source tiles.
     const effectSnapshots = structuredClone(triggeredEffects);
+    const terrainChanges = this.terrain.applyHits(board, destroyedIds, matchedTiles);
+    for (const id of deliveries) destroyedIds.add(id);
+    if (deliveries.size) terrainChanges.objectiveEvents.push({ kind: 'ingredient', amount: deliveries.size });
+    // Only genuinely removed sprites belong to blast playback (ice and durable blockers survive hits).
+    for (const effect of effectSnapshots) effect.affectedTileIds = effect.affectedTileIds.filter(id => destroyedIds.has(id));
 
     // 1. Clear destroyed tiles from the board
     board.forEachTile((t, r, c) => {
@@ -280,6 +305,7 @@ export class CascadeResolver implements ICascadeResolver {
 
     // Playback must never observe mutations from later cascade steps.
     return structuredClone({
+      ...terrainChanges,
       matchedTileIds: Array.from(destroyedIds),
       spawnedSpecials,
       evolutions: evolutions.length > 0 ? evolutions : undefined,

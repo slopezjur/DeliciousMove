@@ -1,8 +1,9 @@
 import { Board } from './Board.ts';
 import { IMatchDetector, MatchDetector } from './MatchDetector.ts';
 import { isProductiveColorSwap } from './matching/MatchEligibility.ts';
-import { SpecialType, Position, TileData } from './TileTypes.ts';
+import { Position, TileData } from './TileTypes.ts';
 import { IRandomSource, MathRandomSource } from './random/IRandomSource.ts';
+import { isCandy } from './BoardFeatures.ts';
 
 export interface PossibleMove {
   from: Position;
@@ -65,7 +66,7 @@ export class ShuffleEngine implements IDeadlockResolver {
     // Any special candy on the board can be directly clicked or swapped without matching colors (rocks are obstacles)
     let hasSpecial = false;
     board.forEachTile((t) => {
-      if (t.special !== SpecialType.None && t.special !== SpecialType.Rock) hasSpecial = true;
+      if (board.canActivate(t)) hasSpecial = true;
     });
     if (hasSpecial) return true;
 
@@ -78,7 +79,11 @@ export class ShuffleEngine implements IDeadlockResolver {
    */
   public shuffleBoard(board: Board): ShuffleResult {
     const tiles: TileData[] = [];
-    board.forEachTile((t) => tiles.push(t));
+    const positions: Position[] = [];
+    board.forEachTile((t) => {
+      if (!board.canSwap(t) || !isCandy(t)) return;
+      tiles.push(t); positions.push({ row: t.row, col: t.col });
+    });
 
     let success = false;
     let attempts = 0;
@@ -86,13 +91,7 @@ export class ShuffleEngine implements IDeadlockResolver {
     while (attempts++ < this.maxShuffleAttempts) {
       this.shuffleInPlace(tiles);
 
-      board.clear();
-      let index = 0;
-      for (let r = 0; r < board.rows; r++) {
-        for (let c = 0; c < board.cols; c++) {
-          board.set(r, c, tiles[index++]);
-        }
-      }
+      positions.forEach((pos, i) => board.set(pos.row, pos.col, tiles[i]));
 
       // Ensure no matches already exist AND there is at least 1 valid move
       if (this.matchDetector.detectMatches(board).length === 0 && this.hasPossibleMoves(board)) {
@@ -102,7 +101,8 @@ export class ShuffleEngine implements IDeadlockResolver {
     }
 
     const mapping = new Map<number, Position>();
-    board.forEachTile((t, r, c) => {
+    tiles.forEach((t) => {
+      const r = t.row, c = t.col;
       mapping.set(t.id, { row: r, col: c });
     });
 
@@ -118,12 +118,12 @@ export class ShuffleEngine implements IDeadlockResolver {
     if (!tileA || !tileB) return false;
 
     // Rocks are completely static and can NEVER be swapped with anything
-    if (tileA.special === SpecialType.Rock || tileB.special === SpecialType.Rock) {
+    if (!board.canSwap(posA) || !board.canSwap(posB)) {
       return false;
     }
 
-    const hasSpecialA = tileA.special !== SpecialType.None;
-    const hasSpecialB = tileB.special !== SpecialType.None;
+    const hasSpecialA = board.canActivate(posA);
+    const hasSpecialB = board.canActivate(posB);
     if (hasSpecialA || hasSpecialB) {
       return true;
     }

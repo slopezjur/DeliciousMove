@@ -32,9 +32,10 @@ export class TileSpawner implements ITileSpawner {
     const wave = (avoidMatches ? this.policies.bonus : this.policies.normal).beginWave();
     for (let col = 0; col < board.cols; col++) {
       for (let row = board.rows - 1; row >= 0; row--) {
-        if (board.get(row, col) !== null) continue;
+        if (!board.isValidPosition(row, col) || board.get(row, col) !== null) continue;
         const { color, special } = wave.nextTile(board, row, col);
-        spawns.push({ tile: board.createTile(row, col, color, special) });
+        const internalSource = board.hasTerrain() || Array.from({ length: row }, (_, r) => r).some(r => board.isGravityBarrier(r, col));
+        spawns.push({ tile: board.createTile(row, col, color, special), ...(internalSource ? { appearInPlace: true } : {}) });
       }
     }
     return spawns;

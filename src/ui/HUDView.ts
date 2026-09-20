@@ -4,6 +4,8 @@ import { ISoundService } from '../audio/ISoundService.ts';
 import { SoundManager } from '../audio/SoundManager.ts';
 
 import { LanguageService } from '../i18n/LanguageService.ts';
+import { ObjectivesView } from './ObjectivesView.ts';
+import { ObjectiveProgress } from '../core/BoardFeatures.ts';
 
 const LOW_MOVES_THRESHOLD = 5;
 
@@ -22,16 +24,19 @@ export class HUDView implements IHUDView {
   private soundBtn: HTMLElement | null;
 
   private soundService: ISoundService;
+  private readonly objectivesView: ObjectivesView;
 
   private currentScore = 0;
   private globalScore = 0;
   private difficulty: LevelDifficulty = LevelDifficulty.Easy;
   private targetScore = 4000;
   private displayedScore = 0;
+  private bonusActive = false;
   private animFrameId: number = 0;
 
   constructor(soundService: ISoundService = new SoundManager(), private readonly language = new LanguageService()) {
     this.soundService = soundService;
+    this.objectivesView = new ObjectivesView(language);
     language.subscribe(() => this.refreshLanguage());
 
     this.scoreEl = this.findElement('score-value');
@@ -57,6 +62,7 @@ export class HUDView implements IHUDView {
   }
 
   public initLevel(config: LevelConfig, bonusMoves: number = 0, globalScore: number = 0): void {
+    this.objectivesView.setLevel(config);
     this.difficulty = config.difficulty;
     this.globalScore = globalScore;
     this.currentScore = 0;
@@ -94,6 +100,7 @@ export class HUDView implements IHUDView {
     }
 
     this.updateMoves(config.moves + bonusMoves, false);
+    this.showBonus(false);
     this.updateShuffles(config.shuffles);
   }
 
@@ -115,18 +122,19 @@ export class HUDView implements IHUDView {
     this.shufflesEl?.classList.toggle('low-moves', shuffles <= 0);
   }
 
-  public addScore(amount: number, globalScore?: number, isBonusPhase?: boolean): void {
-    this.currentScore += amount;
-    if (globalScore !== undefined) {
-      this.globalScore = globalScore;
-      this.setText(this.globalScoreEl, globalScore.toLocaleString(this.language.locale));
-    }
-    this.animateScore();
-    const progress = Math.min(100, (this.currentScore / this.targetScore) * 100);
-    if (this.progressFill) this.progressFill.style.width = `${progress}%`;
+  public updateObjectives(progress: ObjectiveProgress[]): void {
+    this.objectivesView.update(progress);
+    this.showBonus(progress.length > 0 && progress.every(p => p.current >= p.objective.target));
+  }
 
-    const qualified = isBonusPhase ?? (this.currentScore >= this.targetScore);
-    if (qualified) {
+  private showBonus(active: boolean): void {
+    this.bonusActive = active;
+    this.bonusPhaseBadgeEl?.classList.toggle('hidden', !active);
+    const hint = this.findElement('level-feature-hint');
+    hint?.classList.toggle('hidden', active || !hint.textContent);
+    const instruction = this.findElement('objectives-instruction');
+    instruction?.classList.toggle('hidden', active || !this.objectivesView.hasVariedObjectives());
+    if (active) {
       this.bonusPhaseBadgeEl?.classList.remove('hidden');
       this.movesFrozenBadgeEl?.classList.remove('hidden');
       this.movesEl?.classList.remove('low-moves');
@@ -135,7 +143,22 @@ export class HUDView implements IHUDView {
     }
   }
 
+  public addScore(amount: number, globalScore?: number, isBonusPhase?: boolean): void {
+    this.currentScore += amount;
+    if (globalScore !== undefined) {
+      this.globalScore = globalScore;
+      this.setText(this.globalScoreEl, globalScore.toLocaleString(this.language.locale));
+    }
+    this.animateScore();
+    const progress = Math.min(100, (this.currentScore / this.targetScore) * 100);
+    if (this.progressFill && !this.objectivesView.hasVariedObjectives()) this.progressFill.style.width = `${progress}%`;
+
+    const qualified = isBonusPhase ?? (!this.objectivesView.hasVariedObjectives() && this.currentScore >= this.targetScore);
+    this.showBonus(qualified);
+  }
+
   private refreshLanguage(): void {
+    this.showBonus(this.bonusActive);
     this.renderSound();
     this.setText(this.difficultyBadgeEl, this.language.t(this.difficulty));
     this.setText(this.scoreEl, this.displayedScore.toLocaleString(this.language.locale));

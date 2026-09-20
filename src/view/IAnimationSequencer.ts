@@ -11,7 +11,7 @@ export interface IAnimationSequencer {
     posA: Position,
     posB: Position
   ): Promise<void>;
-  playCascadeSteps(steps: CascadeStep[], onScoreGained: (score: number) => void): Promise<void>;
+  playCascadeSteps(steps: CascadeStep[], onScoreGained: (score: number, events?: import('../core/BoardFeatures.ts').ObjectiveEvent[]) => void): Promise<void>;
   animateShuffle(tileMappings: Map<number, Position>): Promise<void>;
   animateForbiddenMove?(tileId: number): Promise<void>;
 }

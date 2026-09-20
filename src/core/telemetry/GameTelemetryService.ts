@@ -121,7 +121,10 @@ export class GameTelemetryService implements IGameTelemetryService {
     const config = session.getLevelConfig();
 
     const specialsOnBoard: Record<string, number> = {};
+    const blockersOnBoard: Record<string, number> = {};
     board.forEachTile((t) => {
+      if (t.kind) blockersOnBoard[t.kind] = (blockersOnBoard[t.kind] ?? 0) + 1;
+      if ((board.getCell(t.row, t.col)?.ice ?? 0) > 0) blockersOnBoard.ice = (blockersOnBoard.ice ?? 0) + 1;
       if (t.special !== SpecialType.None) {
         specialsOnBoard[t.special] = (specialsOnBoard[t.special] || 0) + 1;
       }
@@ -136,6 +139,7 @@ export class GameTelemetryService implements IGameTelemetryService {
 
     return {
       timestamp: new Date().toISOString(),
+      board: board.getSnapshot(), objectives: session.getObjectives?.(), blockersOnBoard,
       lastTurn: this.lastTurn ? structuredClone(this.lastTurn) : undefined,
       level: session.getLevel(),
       difficulty: config.difficulty,
@@ -178,19 +182,22 @@ export class GameTelemetryService implements IGameTelemetryService {
     for (let r = 0; r < board.rows; r++) {
       const cells: string[] = [];
       for (let c = 0; c < board.cols; c++) {
+        if (!board.isValidPosition(r, c)) { cells.push('###'); continue; }
         const t = board.get(r, c);
         if (!t) {
           cells.push(' . ');
           continue;
         }
-        const colInitial = (t.color !== undefined ? COLOR_LETTERS[t.color] : undefined) || '?';
+        const colInitial = t.kind ? { ingredient: 'C', frosting: 'F', crate: 'K', chocolate: 'H' }[t.kind]
+          : t.special === SpecialType.Rock ? 'X' : COLOR_LETTERS[t.color] || '?';
         let specChar = ' ';
         if (t.special === SpecialType.StripedHorizontal) specChar = '-';
         else if (t.special === SpecialType.StripedVertical) specChar = '|';
         else if (t.special === SpecialType.Wrapped) specChar = '*';
         else if (t.special === SpecialType.ColorBomb) specChar = '@';
         else if (t.special === SpecialType.Airplane) specChar = '^';
-        cells.push(`${colInitial}${specChar} `);
+        const cell = board.getCell(r, c)!;
+        cells.push(`${colInitial}${specChar}${cell.ice ? 'I' : cell.jelly ? '~' : cell.exit ? 'v' : ' '}`);
       }
       rows.push(`R${r}: | ${cells.join('')}|`);
     }

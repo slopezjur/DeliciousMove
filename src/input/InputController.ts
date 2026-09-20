@@ -69,7 +69,7 @@ export class InputController implements IInputController {
     if (!gridPos) return;
 
     // Rock obstacles are static: reject picking up or dragging rocks
-    if (this.boardView.isRock?.(gridPos)) return;
+    if (this.boardView.isBlocked?.(gridPos) ?? this.boardView.isRock?.(gridPos)) return;
 
     this.isPointerDown = true;
     this.startPointerPos = { x: local.x, y: local.y };
@@ -123,7 +123,7 @@ export class InputController implements IInputController {
     }
 
     // Rock obstacles are static: reject selection or activation
-    if (this.boardView.isRock?.(tappedPos)) {
+    if (this.boardView.isBlocked?.(tappedPos) ?? this.boardView.isRock?.(tappedPos)) {
       this.clearSelection();
       return;
     }

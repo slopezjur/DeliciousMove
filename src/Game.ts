@@ -2,6 +2,8 @@ import { LanguageService } from './i18n/LanguageService.ts';
 import { LanguageControls } from './i18n/LanguageControls.ts';
 import { IStorage, BrowserStorage } from './persistence/Storage.ts';
 import { SaveStore } from './persistence/SaveStore.ts';
+import { RecordsStore } from './persistence/RecordsStore.ts';
+import { RecordsView } from './ui/RecordsView.ts';
 import { GameSave, SAVE_SCHEMA_VERSION, GAME_RULES_VERSION } from './persistence/SaveCodec.ts';
 import { Application } from 'pixi.js';
 import { Board } from './core/Board.ts';
@@ -10,6 +12,7 @@ import { CascadeResolver, ICascadeResolver } from './core/CascadeResolver.ts';
 import { MatchDetector } from './core/MatchDetector.ts';
 import { SpecialResolver } from './core/SpecialResolver.ts';
 import { SpecialRegistry } from './core/specials/SpecialRegistry.ts';
+import { AirplaneTargetSelector } from './core/specials/AirplaneTargetSelector.ts';
 import { ScoreCalculator } from './core/ScoreCalculator.ts';
 import { BoardGravitySystem } from './core/BoardGravitySystem.ts';
 import { TileSpawner } from './core/TileSpawner.ts';
@@ -39,10 +42,14 @@ import { BrowserClipboardService } from './ui/ClipboardService.ts';
 import { IdleHintController } from './input/IdleHintController.ts';
 import { IIdleHintController } from './input/IIdleHintController.ts';
 import { SettingsView } from './ui/SettingsView.ts';
+import { LevelBoardSetup } from './core/LevelFeatures.ts';
+import { TerrainResolver } from './core/TerrainResolver.ts';
 
 const END_OF_TURN_MODAL_DELAY_MS = 400;
 
 export interface GameDependencies {
+  /** Test/practice entry point; production always starts at level 1 or its checkpoint. */
+  initialLevel?: number;
   app?: Application;
   storage?: IStorage;
   language?: LanguageService;
@@ -70,8 +77,11 @@ export interface GameDependencies {
  * Turn logic lives in TurnCoordinator, level rules in GameSession (SRP).
  */
 export class Game {
+  private readonly initialLevel: number;
   private readonly language: LanguageService;
   private readonly saves: SaveStore;
+  private readonly records: RecordsStore;
+  private readonly recordsView: RecordsView;
   private readonly random: IRandomSource;
   private readonly savedRun: GameSave | null;
   private turnInFlight = false;
@@ -94,10 +104,14 @@ export class Game {
   private readonly debug: GameDebugController;
 
   constructor(deps: GameDependencies = {}) {
+    this.initialLevel = deps.initialLevel ?? 1;
     const storage = deps.storage ?? new BrowserStorage();
     this.language = deps.language ?? new LanguageService(storage, typeof navigator === 'undefined' ? 'en' : navigator.language);
     this.saves = new SaveStore(storage);
     this.savedRun = this.saves.load();
+    this.records = new RecordsStore(storage);
+    if (this.savedRun) this.records.recordCompletedLevel(this.savedRun.session);
+    this.recordsView = new RecordsView(this.records, this.language);
     const random = deps.random ?? new SeededRandomSource(new MathRandomSource().nextInt(0x100000000));
     this.random = random;
     const sound = deps.sound ?? new SoundManager();
@@ -148,7 +162,8 @@ export class Game {
         new BoardGravitySystem(),
         new TileSpawner(ALL_TILE_COLORS, random),
         new MatchDetector(),
-        new SpecialResolver(new SpecialRegistry(random))
+        new SpecialResolver(new SpecialRegistry(random, new AirplaneTargetSelector(random, () => this.session.getObjectives?.() ?? []))),
+        new TerrainResolver(random)
       );
 
     this.turnCoordinator =
@@ -199,11 +214,15 @@ export class Game {
 
     new SettingsView();
     new LanguageControls(this.language, () => this.onResize());
+    this.recordsView.render();
     this.language.subscribe(() => this.renderSaveStatus());
     document.getElementById('new-game-btn')?.addEventListener('click', () => {
       if (!this.turnInFlight && window.confirm(this.language.t('newGameConfirm'))) this.startNewGame();
     });
-    if (!this.restoreProgress()) this.session.restart();
+    if (!this.restoreProgress()) {
+      if (this.initialLevel === 1) this.session.restart();
+      else this.session.startLevel(this.initialLevel);
+    }
     this.renderSaveStatus();
     requestAnimationFrame(() => this.onResize());
   }
@@ -228,6 +247,7 @@ export class Game {
 
   private bindSessionEvents(): void {
     this.session.addListener({
+      onObjectivesUpdated: (objectives) => this.hud.updateObjectives?.(objectives),
       onLevelStarted: (config) => {
         this.telemetry.recordStateTransition('level_start', `Level ${config.level} (${config.difficulty})`);
         this.modal.hide();
@@ -273,7 +293,10 @@ export class Game {
 
   /** A level always opens on a solvable board; this free reshuffle is not charged. */
   private buildPlayableBoard(): void {
+    const setup = new LevelBoardSetup();
+    setup.configure(this.board, this.session.getLevelConfig().features);
     this.boardInitializer.populate(this.board);
+    setup.placeObjects(this.board, this.session.getLevelConfig().features);
     if (!this.deadlockResolver.hasPossibleMoves(this.board)) {
       this.deadlockResolver.shuffleBoard(this.board);
     }
@@ -337,6 +360,8 @@ export class Game {
 
   private saveProgress(): void {
     if (this.session.getState() !== GameState.Victory) return;
+    this.records.recordCompletedLevel(this.session.exportState());
+    this.recordsView.render();
     if (!isStatefulRandomSource(this.random)) {
       this.saves.suspend();
     } else {
@@ -364,6 +389,7 @@ export class Game {
     this.hud.addScore(save.session.score, save.session.globalScore, this.session.isBonusPhase());
     this.hud.updateMoves(save.session.movesLeft, this.session.isTargetReached());
     this.hud.updateShuffles(save.session.shufflesLeft);
+    if (this.session.getObjectives) this.hud.updateObjectives?.(this.session.getObjectives());
     this.boardView.initFromBoard();
     this.onResize();
     this.inputController.setLocked(!this.session.canMakeMove());

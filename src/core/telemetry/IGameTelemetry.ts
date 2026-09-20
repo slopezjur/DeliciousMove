@@ -37,6 +37,9 @@ export interface TurnReplayDetails {
 }
 
 export interface TelemetryStateSnapshot {
+  board?: import('../Board.ts').BoardSnapshot;
+  objectives?: import('../BoardFeatures.ts').ObjectiveProgress[];
+  blockersOnBoard?: Record<string, number>;
   lastTurn?: TurnReplayDetails;
   timestamp: string;
   level: number;

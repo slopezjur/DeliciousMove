@@ -73,12 +73,12 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
 
   public async playCascadeSteps(
     steps: CascadeStep[],
-    onScoreGained: (score: number) => void
+    onScoreGained: (score: number, events?: import('../core/BoardFeatures.ts').ObjectiveEvent[]) => void
   ): Promise<void> {
     let combo = 1;
 
     for (const step of steps) {
-      onScoreGained(step.scoreGained);
+      onScoreGained(step.scoreGained, step.objectiveEvents);
 
       // 1. Delegate each special detonation to its registered presenter and await impact (OCP)
       for (const spec of step.triggeredSpecials ?? []) {
@@ -223,6 +223,11 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
       // Remove sprites only after the timeline completes. Removing them inside
       // tween callbacks kills child tweens and can suppress the parent's completion.
       step.matchedTileIds.forEach((id) => this.boardView.removeTileSprite(id));
+      if (step.cellsAfter) this.boardView.applyTerrainSnapshot?.(step.cellsAfter);
+      for (const tile of step.updatedTiles ?? []) {
+        const sprite = this.boardView.getTileSprite(tile.id);
+        if (sprite) { sprite.tileData = { ...tile }; sprite.updateTexture(); }
+      }
 
       // 4. Animate drops and spawns with constant-velocity lockstep column waterfall
       await new Promise<void>((resolve) => {
@@ -305,13 +310,13 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
             // Stagger position outside the board directly above destination:
             // Every spawned tile in this column starts at `spawn.tile.row - colCount`
             // and falls by exactly `colCount` rows, perfectly preserving 1-tile spacing!
-            const startRow = spawn.tile.row - colCount;
+            const startRow = spawn.appearInPlace ? spawn.tile.row : spawn.tile.row - colCount;
             const startPos = this.boardView.gridToLocal(startRow, col);
 
             sprite.x = targetPos.x;
             sprite.y = startPos.y;
             sprite.scale.set(1, 1);
-            sprite.alpha = 1;
+            sprite.alpha = spawn.appearInPlace ? 0 : 1;
             sprite.visible = true;
             sprite.zIndex = spawn.tile.row;
 
@@ -319,6 +324,7 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
               sprite,
               {
                 y: targetPos.y,
+                alpha: 1,
                 duration: fallDuration,
                 ease: 'none',
               },
@@ -418,16 +424,18 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
   }
 
   public animateShuffle(tileMappings: Map<number, Position>): Promise<void> {
+    if (tileMappings.size === 0) { this.boardView.syncSpritesWithBoard(); return Promise.resolve(); }
     return new Promise((resolve) => {
       this.soundService.playShuffle();
       const { x: centerX, y: centerY } = this.getBoardCenter();
 
       this.boardView.vfx.createFloatingText(centerX, centerY, this.language.t('shuffle'), 0x00e5ff);
 
-      const tl = gsap.timeline({ onComplete: resolve });
+      const tl = gsap.timeline({ onComplete: () => { this.boardView.syncSpritesWithBoard(); resolve(); } });
 
       // Gather towards center with swirl
       this.boardView.getTileSpritesMap().forEach((sprite) => {
+        if (!tileMappings.has(sprite.tileData.id)) return;
         tl.to(
           sprite,
           {

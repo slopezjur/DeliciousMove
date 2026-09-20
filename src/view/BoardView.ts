@@ -7,6 +7,8 @@ import { AssetFactory } from './AssetFactory.ts';
 import { VFXManager, IVFXManager } from './VFXManager.ts';
 import { IBoardView } from './IBoardViewContracts.ts';
 import { calculateBoardLayout } from './BoardLayout.ts';
+import { CellState } from '../core/BoardFeatures.ts';
+import { TerrainView } from './TerrainView.ts';
 
 export class BoardView extends Container implements IBoardView {
   public get displayObject(): this { return this; }
@@ -25,6 +27,8 @@ export class BoardView extends Container implements IBoardView {
   private cellSprites: Graphics[][] = [];
   private frameGraphics: Graphics;
   private tilesMask: Graphics;
+  private terrainView = new TerrainView();
+  private terrainCells: CellState[] = [];
 
   constructor(board: Board) {
     super();
@@ -41,6 +45,7 @@ export class BoardView extends Container implements IBoardView {
     this.addChild(this.bgContainer);
     this.addChild(this.tilesContainer);
     this.addChild(this.tilesMask);
+    this.addChild(this.terrainView);
     this.addChild(this.vfxContainer);
 
     this.tilesContainer.mask = this.tilesMask;
@@ -80,9 +85,7 @@ export class BoardView extends Container implements IBoardView {
     this.y = offsetY + layout.y;
 
     // Clip tiles to board boundaries so offscreen spawns never peek outside
-    this.tilesMask.clear();
-    this.tilesMask.rect(0, 0, this.boardPixelWidth, this.boardPixelHeight);
-    this.tilesMask.fill({ color: 0xffffff });
+    this.applyTerrainSnapshot(this.terrainCells.length ? this.terrainCells : this.board.getCells());
 
     // Draw ornate game frame behind cells
     this.drawFancyFrame(layout.framePadding);
@@ -165,6 +168,7 @@ export class BoardView extends Container implements IBoardView {
   }
 
   public initFromBoard(): void {
+    this.applyTerrainSnapshot(this.board.getCells());
     this.tileSprites.forEach((s) => {
       gsap.killTweensOf(s);
       gsap.killTweensOf(s.scale);
@@ -232,8 +236,20 @@ export class BoardView extends Container implements IBoardView {
   }
 
   public isSpecialTile(pos: Position): boolean {
-    const tile = this.board.get(pos.row, pos.col);
-    return tile !== null && tile.special !== SpecialType.None && tile.special !== SpecialType.Rock;
+    return this.board.canActivate(pos);
+  }
+
+  public isBlocked(pos: Position): boolean { return !this.board.canSwap(pos); }
+
+  public applyTerrainSnapshot(cells: CellState[]): void {
+    this.terrainCells = cells.map(cell => ({ ...cell }));
+    this.terrainView.renderCells(cells, this.tileSize);
+    this.tilesMask.clear();
+    for (const cell of cells) {
+      this.cellSprites[cell.row][cell.col].visible = cell.playable;
+      if (cell.playable) this.tilesMask.rect(cell.col * this.tileSize, cell.row * this.tileSize, this.tileSize, this.tileSize);
+    }
+    this.tilesMask.fill({ color: 0xffffff });
   }
 
   public isRock(pos: Position): boolean {
@@ -250,6 +266,7 @@ export class BoardView extends Container implements IBoardView {
   }
 
   public syncSpritesWithBoard(): void {
+    this.applyTerrainSnapshot(this.board.getCells());
     const activeIds = new Set<number>();
     this.board.forEachTile((tile, r, c) => {
       activeIds.add(tile.id);

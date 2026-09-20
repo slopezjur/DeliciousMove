@@ -4,10 +4,28 @@ export type Locale = 'en' | 'es';
 export const LANGUAGE_KEY = 'deliciousmove.language';
 
 const en = {
+  bestLevel: 'Best level cleared', bestScore: 'Best total score',
+  recordsTip: 'Personal records update only after completing a level and survive New Game.',
+  recordsUnavailable: 'Records cannot be saved in this browser.',
+  recordsPreserved: 'Unreadable or newer records preserved; record saving is paused.',
+  bonusExplanation: 'Objectives complete! Moves are frozen. Keep matching for extra points until no moves remain.',
+  allRequired: 'Complete every goal below to unlock the bonus round.',
+  objectives: 'Objectives', practiceMode: 'Practice level {level} · Progress is not saved',
+  collectColor: 'Collect {color}', clearBlocker: 'Clear {blocker}',
+  objective_score: 'Minimum score', objective_jelly: 'Clear jelly', objective_ingredient: 'Deliver cherries',
+  color_0: 'red', color_1: 'blue', color_2: 'green', color_3: 'yellow', color_4: 'purple', color_5: 'orange',
+  blocker_ice: 'ice', blocker_frosting: 'frosting', blocker_crate: 'crates', blocker_chocolate: 'chocolate',
+  featureHelp: 'Board guide',
+  hintJelly: 'Pink outlines are jelly. Clear the candy on them to remove it.',
+  hintIce: 'Ice locks candies. Nearby clears or blasts remove one layer per cascade.',
+  hintBlockers: 'Clear beside frosting or crates, or hit them with specials. Dots show layers left.',
+  hintShape: 'Gaps split gravity. Each section refills independently.',
+  hintIngredients: 'Cherries cannot match or explode. Clear below them to reach the green exits.',
+  hintChocolate: 'Chocolate spreads once per turn unless you clear some. Specials and cherries are protected.',
   settings: 'Settings', language: 'Language', sound: 'Sound', soundOn: 'On', soundOff: 'Off',
   checkpointPending: 'Saves at level end', checkpointSaved: '✓ Level checkpoint saved',
   level: 'Level', globalScore: 'Global Score', moves: 'Moves', shuffles: 'Shuffles',
-  score: 'Score', target: 'Min Target', frozen: '❄️ FROZEN', bonus: 'BONUS PHASE ❄️',
+  score: 'Score', target: 'Min Target', frozen: '❄️ FROZEN', bonus: 'BONUS ROUND',
   globalTip: 'Total score accumulated across all levels',
   movesTip: 'Unused moves from cleared levels accumulate here!',
   shufflesTip: 'Rescue reshuffles left this level', soundTip: 'Toggle sound',
@@ -40,10 +58,28 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 const es: Record<MessageKey, string> = {
+  bestLevel: 'Mejor nivel superado', bestScore: 'Mejor puntuación total',
+  recordsTip: 'Los récords se actualizan al completar un nivel y se conservan al iniciar una nueva partida.',
+  recordsUnavailable: 'No se pueden guardar los récords en este navegador.',
+  recordsPreserved: 'Récords ilegibles o más recientes conservados; su guardado está pausado.',
+  bonusExplanation: '¡Objetivos completados! Los movimientos están congelados. Sigue combinando para sumar puntos hasta que no queden jugadas.',
+  allRequired: 'Completa todos estos objetivos para desbloquear la ronda extra.',
+  objectives: 'Objetivos', practiceMode: 'Nivel de práctica {level} · No se guarda el progreso',
+  collectColor: 'Recoge {color}', clearBlocker: 'Elimina {blocker}',
+  objective_score: 'Puntuación mínima', objective_jelly: 'Elimina gelatina', objective_ingredient: 'Entrega cerezas',
+  color_0: 'rojos', color_1: 'azules', color_2: 'verdes', color_3: 'amarillos', color_4: 'morados', color_5: 'naranjas',
+  blocker_ice: 'hielo', blocker_frosting: 'glaseado', blocker_crate: 'cajas', blocker_chocolate: 'chocolate',
+  featureHelp: 'Guía del tablero',
+  hintJelly: 'Los bordes rosas son gelatina. Elimina el caramelo de encima para quitarla.',
+  hintIce: 'El hielo bloquea caramelos. Las eliminaciones cercanas o explosiones quitan una capa por cascada.',
+  hintBlockers: 'Elimina junto al glaseado o las cajas, o usa especiales. Los puntos indican las capas restantes.',
+  hintShape: 'Los huecos dividen la gravedad. Cada sección se rellena por separado.',
+  hintIngredients: 'Las cerezas no se combinan ni explotan. Despeja debajo para llevarlas a las salidas verdes.',
+  hintChocolate: 'El chocolate se extiende una vez por turno si no eliminas alguno. No cubre especiales ni cerezas.',
   settings: 'Ajustes', language: 'Idioma', sound: 'Sonido', soundOn: 'Activado', soundOff: 'Silenciado',
   checkpointPending: 'Guardado al terminar el nivel', checkpointSaved: '✓ Nivel completado guardado',
   level: 'Nivel', globalScore: 'Puntuación total', moves: 'Movimientos', shuffles: 'Mezclas',
-  score: 'Puntuación', target: 'Objetivo mínimo', frozen: '❄️ CONGELADOS', bonus: 'FASE EXTRA ❄️',
+  score: 'Puntuación', target: 'Objetivo mínimo', frozen: '❄️ CONGELADOS', bonus: 'RONDA EXTRA',
   globalTip: 'Puntuación acumulada en todos los niveles',
   movesTip: '¡Los movimientos sobrantes de los niveles superados se acumulan aquí!',
   shufflesTip: 'Mezclas de rescate restantes en este nivel', soundTip: 'Activar o silenciar sonido',
@@ -91,7 +127,12 @@ export class LanguageService {
   }
 
   public toggle(): void {
-    this.locale = this.locale === 'en' ? 'es' : 'en';
+    this.setLocale(this.locale === 'en' ? 'es' : 'en');
+  }
+
+  public setLocale(locale: Locale): void {
+    if (locale === this.locale) return;
+    this.locale = locale;
     try { this.storage?.setItem(LANGUAGE_KEY, this.locale); } catch { /* Best-effort preference. */ }
     this.listeners.forEach((listener) => listener());
   }
