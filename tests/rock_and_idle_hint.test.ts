@@ -138,17 +138,6 @@ describe('Rock Obstacles & Idle Hint System', () => {
       const candy = board.createTile(0, 0, TileColor.Red, SpecialType.None);
       const rock = board.createTile(0, 1, TileColor.Blue, SpecialType.Rock);
 
-      const candySprite = { id: candy.id } as any;
-      const rockSprite = { id: rock.id } as any;
-
-      const boardView = {
-        getTileSprite: vi.fn((id: number) => {
-          if (id === candy.id) return candySprite;
-          if (id === rock.id) return rockSprite;
-          return null;
-        }),
-      } as any;
-
       const animations = {
         animateSwap: vi.fn(),
         animateForbiddenMove: vi.fn().mockResolvedValue(undefined),
@@ -160,7 +149,6 @@ describe('Rock Obstacles & Idle Hint System', () => {
       const { TurnCoordinator } = await import('../src/TurnCoordinator.ts');
       const coordinator = new TurnCoordinator({
         board,
-        boardView,
         animations,
         cascadeResolver: {} as any,
         deadlockResolver: {} as any,
@@ -173,7 +161,7 @@ describe('Rock Obstacles & Idle Hint System', () => {
       // animateSwap should NEVER be called; rock stays 100% static
       expect(animations.animateSwap).not.toHaveBeenCalled();
       // animateForbiddenMove MUST be called on the candy sprite attempting the move
-      expect(animations.animateForbiddenMove).toHaveBeenCalledWith(candySprite);
+      expect(animations.animateForbiddenMove).toHaveBeenCalledWith(candy.id);
       // Move was NOT consumed
       expect(session.getMovesLeft()).toBe(10);
       // Positions remain unchanged
@@ -199,17 +187,6 @@ describe('Rock Obstacles & Idle Hint System', () => {
         }
       }
 
-      const mockSpriteA = { id: 1, x: 10, y: 10 } as any;
-      const mockSpriteB = { id: 2, x: 20, y: 10 } as any;
-
-      const boardView = {
-        getTileSprite: vi.fn((id: number) => {
-          if (id === board.get(0, 0)!.id) return mockSpriteA;
-          if (id === board.get(0, 1)!.id) return mockSpriteB;
-          return null;
-        }),
-      } as any;
-
       const deadlockResolver = {
         findPossibleMoves: vi.fn(() => [
           { from: { row: 0, col: 0 }, to: { row: 0, col: 1 } },
@@ -225,7 +202,6 @@ describe('Rock Obstacles & Idle Hint System', () => {
 
       const hintController = new IdleHintController(
         board,
-        boardView,
         deadlockResolver,
         session,
         animations,
@@ -241,7 +217,7 @@ describe('Rock Obstacles & Idle Hint System', () => {
       // At 10s: hint triggered on the combineable sprites!
       vi.advanceTimersByTime(1_000);
       expect(animations.animateHint).toHaveBeenCalledTimes(1);
-      expect(animations.animateHint).toHaveBeenCalledWith([mockSpriteA, mockSpriteB]);
+      expect(animations.animateHint).toHaveBeenCalledWith([board.get(0, 0)!.id, board.get(0, 1)!.id]);
 
       hintController.stop();
     });
@@ -260,10 +236,6 @@ describe('Rock Obstacles & Idle Hint System', () => {
         ]),
       } as any;
 
-      const boardView = {
-        getTileSprite: vi.fn(() => ({ id: 1 } as any)),
-      } as any;
-
       const session = new GameSession(new StubProgression());
       session.startLevel(1);
 
@@ -273,7 +245,6 @@ describe('Rock Obstacles & Idle Hint System', () => {
 
       const hintController = new IdleHintController(
         board,
-        boardView,
         deadlockResolver,
         session,
         animations,
@@ -325,8 +296,8 @@ describe('Rock Obstacles & Idle Hint System', () => {
 
       // Verify global score rendered in its dedicated container
       expect(elements['modal-global-container'].classList.remove).toHaveBeenCalledWith('hidden');
-      expect(elements['modal-global-score'].textContent).toBe((12890).toLocaleString());
-      expect(elements['modal-final-score'].textContent).toBe((3450).toLocaleString());
+      expect(elements['modal-global-score'].textContent).toBe((12890).toLocaleString('en'));
+      expect(elements['modal-final-score'].textContent).toBe((3450).toLocaleString('en'));
 
       delete (globalThis as any).document;
     });

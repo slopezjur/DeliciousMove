@@ -668,6 +668,22 @@
         touch-action: none;
         z-index: 1;
       }
+      #language-toggle-btn, #new-game-btn {
+        border: 1px solid #ffffff33; border-radius: 10px; padding: 8px 10px;
+        background: #ffffff12; color: #fff; font: inherit; font-size: 12px; cursor: pointer;
+      }
+      #new-game-btn:disabled { opacity: 0.45; cursor: default; }
+      #save-status { color: #b9aaca; font-size: 11px; width: 100%; text-align: right; }
+      #save-status[data-warning="true"] { color: #ffe082; }
+      .hud-top-actions { flex-wrap: wrap; }
+      #top-hud { flex-wrap: wrap; height: auto; }
+      @media (max-width: 700px) {
+        .hud-top-row { flex-wrap: wrap; gap: 8px; }
+        .hud-top-actions { justify-content: flex-end; width: 100%; }
+        .hud-stats { width: 100%; justify-content: space-between; }
+        .hud-card { min-width: 0; padding: 4px 6px; }
+        .hud-label { font-size: 9px; letter-spacing: 0; }
+      }
     </style>
   </head>
   <body>
@@ -676,37 +692,39 @@
         <div class="hud-top-row">
           <div class="hud-stats">
             <div class="hud-card" id="level-card">
-              <span class="hud-label">Level <span id="difficulty-badge" class="difficulty-badge difficulty-easy">EASY</span></span>
+              <span class="hud-label"><span data-i18n="level">Level</span> <span id="difficulty-badge" class="difficulty-badge difficulty-easy">EASY</span></span>
               <span id="level-value" class="hud-value">1</span>
             </div>
-            <div class="hud-card" id="global-score-card" title="Total score accumulated across all levels">
-              <span class="hud-label">Global Score</span>
+            <div class="hud-card" id="global-score-card" data-i18n-title="globalTip" title="Total score accumulated across all levels">
+              <span class="hud-label" data-i18n="globalScore">Global Score</span>
               <span id="global-score-value" class="hud-value global-score-num">0</span>
             </div>
-            <div class="hud-card" id="moves-card" title="Unused moves from cleared levels accumulate here!">
-              <span class="hud-label">Moves <span id="moves-bonus-badge" class="moves-bonus-badge hidden">+0</span><span id="moves-frozen-badge" class="moves-frozen-badge hidden">❄️ FROZEN</span></span>
+            <div class="hud-card" id="moves-card" data-i18n-title="movesTip" title="Unused moves from cleared levels accumulate here!">
+              <span class="hud-label"><span data-i18n="moves">Moves</span> <span id="moves-bonus-badge" class="moves-bonus-badge hidden">+0</span><span data-i18n="frozen" id="moves-frozen-badge" class="moves-frozen-badge hidden">❄️ FROZEN</span></span>
               <span id="moves-value" class="hud-value">25</span>
             </div>
-            <div class="hud-card" title="Rescue reshuffles left this level">
-              <span class="hud-label">Shuffles</span>
+            <div class="hud-card" data-i18n-title="shufflesTip" title="Rescue reshuffles left this level">
+              <span class="hud-label" data-i18n="shuffles">Shuffles</span>
               <span id="shuffles-value" class="hud-value">4</span>
             </div>
           </div>
           <div class="hud-top-actions">
-            <button id="sound-toggle-btn" title="Toggle Sound">🔊</button>
-            <button id="debug-toggle-btn" title="Toggle Debug / Telemetry (or press `)">🐞</button>
+            <button id="language-toggle-btn" data-i18n-title="languageTip" title="Change language (L)" aria-label="Change language (L)">ES</button>
+            <button id="new-game-btn" data-i18n="newGame">New Game</button>
+            <button id="sound-toggle-btn" data-i18n-title="soundTip" title="Toggle Sound">🔊</button>
+            <button id="debug-toggle-btn" data-i18n-title="debugTip" title="Toggle Debug / Telemetry (or press `)">🐞</button>
           </div>
         </div>
 
         <div class="progress-container">
           <div class="progress-header">
             <div class="score-box">
-              <span class="hud-label">Score</span>
+              <span class="hud-label" data-i18n="score">Score</span>
               <strong id="score-value" class="progress-num">0</strong>
             </div>
-            <div id="bonus-phase-indicator" class="bonus-phase-badge hidden">BONUS PHASE ❄️</div>
+            <div data-i18n="bonus" id="bonus-phase-indicator" class="bonus-phase-badge hidden">BONUS PHASE ❄️</div>
             <div class="target-box">
-              <span class="hud-label">Min Target</span>
+              <span class="hud-label" data-i18n="target">Min Target</span>
               <strong id="target-value" class="progress-num">4,000</strong>
             </div>
           </div>
@@ -714,6 +732,7 @@
             <div id="progress-fill"></div>
           </div>
         </div>
+        <div id="save-status" role="status" aria-live="polite"></div>
       </header>
 
       <div id="game-modal" class="hidden">
@@ -722,11 +741,11 @@
           <p id="modal-detail">Level cleared.</p>
           <div class="modal-scores-row">
             <div class="modal-score-card">
-              <span class="modal-score-caption">Level Score</span>
+              <span class="modal-score-caption" data-i18n="finalScore">Level Score</span>
               <p id="modal-final-score">0</p>
             </div>
             <div id="modal-global-container" class="modal-score-card hidden">
-              <span class="modal-score-caption caption-cyan">Global Score</span>
+              <span class="modal-score-caption caption-cyan" data-i18n="globalScore">Global Score</span>
               <p id="modal-global-score" class="score-cyan">0</p>
             </div>
           </div>
@@ -738,12 +757,12 @@
       <div id="debug-overlay" class="hidden">
         <div class="debug-panel">
           <div class="debug-header">
-            <h3>🐞 Game Diagnostics & Telemetry</h3>
+            <h3 data-i18n="diagnostics">🐞 Game Diagnostics & Telemetry</h3>
             <div class="debug-actions">
-              <button id="debug-btn-copy" class="dbg-btn" title="Copy full JSON report">📋 Copy Report</button>
-              <button id="debug-btn-unlock" class="dbg-btn dbg-btn-warn" title="Emergency unlock for frozen input">🔓 Unlock Input</button>
-              <button id="debug-btn-shuffle" class="dbg-btn" title="Force board reshuffle">🔀 Reshuffle</button>
-              <button id="debug-btn-close" class="dbg-btn dbg-btn-danger" title="Close overlay">✖</button>
+              <button data-i18n="copy" id="debug-btn-copy" class="dbg-btn" data-i18n-title="copyTip" title="Copy full JSON report">📋 Copy Report</button>
+              <button data-i18n="unlock" id="debug-btn-unlock" class="dbg-btn dbg-btn-warn" data-i18n-title="unlockTip" title="Emergency unlock for frozen input">🔓 Unlock Input</button>
+              <button data-i18n="reshuffle" id="debug-btn-shuffle" class="dbg-btn" data-i18n-title="reshuffleTip" title="Force board reshuffle">🔀 Reshuffle</button>
+              <button id="debug-btn-close" class="dbg-btn dbg-btn-danger" data-i18n-title="close" title="Close overlay">✖</button>
             </div>
           </div>
           <div id="debug-overlay-content" class="debug-content"></div>

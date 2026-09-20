@@ -11,6 +11,21 @@ export interface IRandomSource {
   pick<T>(items: readonly T[]): T;
 }
 
+export interface RandomSnapshot {
+  algorithm: 'mulberry32';
+  state: number;
+}
+
+export interface IStatefulRandomSource extends IRandomSource {
+  getSnapshot(): RandomSnapshot;
+  restore(snapshot: RandomSnapshot): void;
+}
+
+export function isStatefulRandomSource(random: IRandomSource): random is IStatefulRandomSource {
+  return 'getSnapshot' in random && typeof random.getSnapshot === 'function'
+    && 'restore' in random && typeof random.restore === 'function';
+}
+
 abstract class RandomSourceBase implements IRandomSource {
   public abstract next(): number;
 
@@ -35,7 +50,7 @@ export class MathRandomSource extends RandomSourceBase {
  * Deterministic mulberry32 generator. Identical seeds always replay identical games,
  * which is what makes the headless engine test suite reproducible.
  */
-export class SeededRandomSource extends RandomSourceBase {
+export class SeededRandomSource extends RandomSourceBase implements IStatefulRandomSource {
   private state: number;
 
   constructor(seed: number = 1) {
@@ -49,6 +64,18 @@ export class SeededRandomSource extends RandomSourceBase {
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  public getSnapshot(): RandomSnapshot {
+    return { algorithm: 'mulberry32', state: this.state };
+  }
+
+  public restore(snapshot: RandomSnapshot): void {
+    if (snapshot.algorithm !== 'mulberry32' || !Number.isInteger(snapshot.state)
+      || snapshot.state < 0 || snapshot.state > 0xffffffff) {
+      throw new Error('Invalid random generator state.');
+    }
+    this.state = snapshot.state;
   }
 
   public reset(seed: number): void {

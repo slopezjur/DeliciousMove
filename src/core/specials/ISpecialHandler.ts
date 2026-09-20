@@ -56,7 +56,8 @@ export interface ISpecialComboHandler {
 
 export interface ISpecialRegistry {
   registerEffectHandler(handler: ISpecialEffectHandler): void;
-  registerComboHandler(handler: ISpecialComboHandler): void;
+  /** Lower priorities run first; equal priorities retain registration order. */
+  registerComboHandler(handler: ISpecialComboHandler, priority?: number): void;
   getEffectHandler(type: SpecialType): ISpecialEffectHandler | undefined;
   findComboHandler(a: TileData, b: TileData): ISpecialComboHandler | undefined;
 }

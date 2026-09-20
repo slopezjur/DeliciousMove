@@ -1,4 +1,4 @@
-import { FederatedPointerEvent } from 'pixi.js';
+import { FederatedPointerEvent, ContainerChild } from 'pixi.js';
 import { Board } from '../core/Board.ts';
 import { Position, TileData } from '../core/TileTypes.ts';
 import { TileSprite } from './TileSprite.ts';
@@ -56,6 +56,7 @@ export interface IBoardViewAnimator {
  * Allows composition roots and managers to depend on view contracts rather than Pixi concrete classes.
  */
 export interface IBoardView extends IBoardInputSurface, IBoardViewAnimator {
+  readonly displayObject: ContainerChild;
   initFromBoard(): void;
   updateLayout(availableWidth: number, availableHeight: number, offsetY?: number): void;
 }

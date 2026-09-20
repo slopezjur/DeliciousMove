@@ -20,8 +20,6 @@ import { SeededRandomSource } from '../src/core/random/IRandomSource.ts';
 import { ALL_TILE_COLORS, Position, TileColor } from '../src/core/TileTypes.ts';
 import { TurnCoordinator } from '../src/TurnCoordinator.ts';
 import { IAnimationSequencer } from '../src/view/IAnimationSequencer.ts';
-import { IBoardViewAnimator } from '../src/view/IBoardViewContracts.ts';
-import { TileSprite } from '../src/view/TileSprite.ts';
 import { IGameTelemetryService } from '../src/core/telemetry/IGameTelemetry.ts';
 
 class FixedProgression implements ILevelProgression {
@@ -44,7 +42,7 @@ class FakeAnimator implements IAnimationSequencer {
   public shuffles = 0;
   public cascadeSteps = 0;
 
-  public async animateSwap(_a: TileSprite, _b: TileSprite, posA: Position, posB: Position) {
+  public async animateSwap(_a: number, _b: number, posA: Position, posB: Position) {
     this.swaps.push([posA, posB]);
   }
   public async playCascadeSteps(steps: any[], onScoreGained: (score: number) => void) {
@@ -55,13 +53,6 @@ class FakeAnimator implements IAnimationSequencer {
     this.shuffles++;
   }
 }
-
-/** Minimal animator view: TurnCoordinator only ever looks sprites up by tile id. */
-const fakeBoardView = (board: Board): IBoardViewAnimator =>
-  ({
-    board,
-    getTileSprite: (id: number) => ({ id }) as unknown as TileSprite,
-  }) as unknown as IBoardViewAnimator;
 
 const makeCascadeResolver = (seed = 5) =>
   new CascadeResolver(
@@ -117,7 +108,6 @@ const makeCoordinator = (opts: {
   const animations = opts.animations ?? new FakeAnimator();
   const coordinator = new TurnCoordinator({
     board: opts.board,
-    boardView: fakeBoardView(opts.board),
     animations,
     cascadeResolver: makeCascadeResolver(),
     deadlockResolver:
@@ -338,7 +328,7 @@ describe('TurnCoordinator', () => {
     /**
      * Plays a full level making random legal moves - the "improper movements" case -
      * and reports the turn on which the board jammed, or -1 if it never did.
-     * Seeds come from a sweep over 400 simulated games; roughly 3% of them jam.
+     * Fixed seeds exercise reachable jams; they do not estimate a population-wide jam rate.
      */
     const playUntilJam = (seed: number, maxMoves = 30): number => {
       const random = new SeededRandomSource(seed);
@@ -369,10 +359,10 @@ describe('TurnCoordinator', () => {
       expect(playUntilJam(942361)).toBe(12);
     });
 
-    it('leaves most games unjammed, so the risk stays occasional rather than routine', () => {
-      // 1 * 7919 never jams; 24 * 7919 jams at move 17.
+    it('can play 30 legal moves without a jam for these fixed seeds', () => {
+      // Swipe-directed stripes change the outcome of the former move-17 jam fixture.
       expect(playUntilJam(7919)).toBe(-1);
-      expect(playUntilJam(190056)).toBe(17);
+      expect(playUntilJam(190056)).toBe(-1);
     });
 
     it('turns a real jam into a loss once the rescue budget is gone', async () => {
@@ -439,7 +429,6 @@ describe('TurnCoordinator', () => {
 
     const coordinator = new TurnCoordinator({
       board,
-      boardView: fakeBoardView(board),
       animations: new FakeAnimator(),
       cascadeResolver: makeCascadeResolver(),
       deadlockResolver: new StubDeadlockResolver(true, true),

@@ -599,7 +599,7 @@ export class GiantWrappedComboHandler implements ISpecialComboHandler {
 
 export class SpecialRegistry implements ISpecialRegistry {
   private effectHandlers = new Map<SpecialType, ISpecialEffectHandler>();
-  private comboHandlers: ISpecialComboHandler[] = [];
+  private comboHandlers: { handler: ISpecialComboHandler; priority: number }[] = [];
 
   constructor(random: IRandomSource = new MathRandomSource()) {
     this.registerDefaultHandlers(random);
@@ -609,8 +609,9 @@ export class SpecialRegistry implements ISpecialRegistry {
     this.effectHandlers.set(handler.supportedType, handler);
   }
 
-  public registerComboHandler(handler: ISpecialComboHandler): void {
-    this.comboHandlers.push(handler);
+  public registerComboHandler(handler: ISpecialComboHandler, priority = 0): void {
+    this.comboHandlers.push({ handler, priority });
+    this.comboHandlers.sort((a, b) => a.priority - b.priority);
   }
 
   public getEffectHandler(type: SpecialType): ISpecialEffectHandler | undefined {
@@ -618,7 +619,7 @@ export class SpecialRegistry implements ISpecialRegistry {
   }
 
   public findComboHandler(a: TileData, b: TileData): ISpecialComboHandler | undefined {
-    return this.comboHandlers.find((h) => h.canHandle(a, b));
+    return this.comboHandlers.find(({ handler }) => handler.canHandle(a, b))?.handler;
   }
 
   private registerDefaultHandlers(random: IRandomSource): void {
@@ -638,6 +639,6 @@ export class SpecialRegistry implements ISpecialRegistry {
     this.registerComboHandler(new GiantCrossComboHandler());
     this.registerComboHandler(new GiantWrappedComboHandler());
     this.registerComboHandler(new CrossStripedComboHandler());
-    this.registerComboHandler(new ColorBombNormalComboHandler());
+    this.registerComboHandler(new ColorBombNormalComboHandler(), 1000);
   }
 }

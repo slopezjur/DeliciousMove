@@ -8,6 +8,8 @@ import { VFXManager, IVFXManager } from './VFXManager.ts';
 import { IBoardView } from './IBoardViewContracts.ts';
 
 export class BoardView extends Container implements IBoardView {
+  public get displayObject(): this { return this; }
+
   public readonly board: Board;
   private bgContainer: Container;
   private tilesContainer: Container;
@@ -180,6 +182,8 @@ export class BoardView extends Container implements IBoardView {
 
   public initFromBoard(): void {
     this.tileSprites.forEach((s) => {
+      gsap.killTweensOf(s);
+      gsap.killTweensOf(s.scale);
       this.tilesContainer.removeChild(s);
       s.destroy();
     });
@@ -203,6 +207,8 @@ export class BoardView extends Container implements IBoardView {
   public addTileSprite(tile: TileData): TileSprite {
     const existing = this.tileSprites.get(tile.id);
     if (existing) {
+      gsap.killTweensOf(existing);
+      gsap.killTweensOf(existing.scale);
       this.tilesContainer.removeChild(existing);
       this.tileSprites.delete(tile.id);
       existing.destroy();
@@ -217,6 +223,8 @@ export class BoardView extends Container implements IBoardView {
   public removeTileSprite(id: number): void {
     const sprite = this.tileSprites.get(id);
     if (sprite) {
+      gsap.killTweensOf(sprite);
+      gsap.killTweensOf(sprite.scale);
       this.tilesContainer.removeChild(sprite);
       this.tileSprites.delete(id);
       sprite.destroy();
@@ -272,7 +280,7 @@ export class BoardView extends Container implements IBoardView {
         sprite.alpha = 1;
         sprite.visible = true;
         sprite.zIndex = r;
-        sprite.tileData = tile;
+        sprite.tileData = { ...tile, row: r, col: c };
         sprite.updateTexture();
       } else {
         const newSprite = this.addTileSprite(tile);

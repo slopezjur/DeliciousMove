@@ -1,7 +1,9 @@
 import { IHUDView } from './IHUDView.ts';
-import { LevelConfig } from '../core/LevelProgression.ts';
+import { LevelConfig, LevelDifficulty } from '../core/LevelProgression.ts';
 import { ISoundService } from '../audio/ISoundService.ts';
-import { soundManagerInstance } from '../audio/SoundManager.ts';
+import { SoundManager } from '../audio/SoundManager.ts';
+
+import { LanguageService } from '../i18n/LanguageService.ts';
 
 const LOW_MOVES_THRESHOLD = 5;
 
@@ -22,12 +24,15 @@ export class HUDView implements IHUDView {
   private soundService: ISoundService;
 
   private currentScore = 0;
+  private globalScore = 0;
+  private difficulty: LevelDifficulty = LevelDifficulty.Easy;
   private targetScore = 4000;
   private displayedScore = 0;
   private animFrameId: number = 0;
 
-  constructor(soundService: ISoundService = soundManagerInstance) {
+  constructor(soundService: ISoundService = new SoundManager(), private readonly language = new LanguageService()) {
     this.soundService = soundService;
+    language.subscribe(() => this.refreshLanguage());
 
     this.scoreEl = this.findElement('score-value');
     this.globalScoreEl = this.findElement('global-score-value');
@@ -51,14 +56,16 @@ export class HUDView implements IHUDView {
   }
 
   public initLevel(config: LevelConfig, bonusMoves: number = 0, globalScore: number = 0): void {
+    this.difficulty = config.difficulty;
+    this.globalScore = globalScore;
     this.currentScore = 0;
     this.displayedScore = 0;
     this.targetScore = config.targetScore;
 
     this.setText(this.scoreEl, '0');
-    this.setText(this.globalScoreEl, globalScore.toLocaleString());
+    this.setText(this.globalScoreEl, globalScore.toLocaleString(this.language.locale));
     this.setText(this.levelEl, config.level.toString());
-    this.setText(this.targetEl, config.targetScore.toLocaleString());
+    this.setText(this.targetEl, config.targetScore.toLocaleString(this.language.locale));
     if (this.progressFill) {
       this.progressFill.style.width = '0%';
       this.progressFill.classList.remove('bonus-phase-glow');
@@ -72,7 +79,7 @@ export class HUDView implements IHUDView {
     }
 
     if (this.difficultyBadgeEl && config.difficulty) {
-      this.difficultyBadgeEl.textContent = config.difficulty.replace('_', ' ').toUpperCase();
+      this.difficultyBadgeEl.textContent = this.language.t(config.difficulty);
       this.difficultyBadgeEl.className = `difficulty-badge difficulty-${config.difficulty}`;
     }
 
@@ -110,7 +117,8 @@ export class HUDView implements IHUDView {
   public addScore(amount: number, globalScore?: number, isBonusPhase?: boolean): void {
     this.currentScore += amount;
     if (globalScore !== undefined) {
-      this.setText(this.globalScoreEl, globalScore.toLocaleString());
+      this.globalScore = globalScore;
+      this.setText(this.globalScoreEl, globalScore.toLocaleString(this.language.locale));
     }
     this.animateScore();
     const progress = Math.min(100, (this.currentScore / this.targetScore) * 100);
@@ -126,6 +134,13 @@ export class HUDView implements IHUDView {
     }
   }
 
+  private refreshLanguage(): void {
+    this.setText(this.difficultyBadgeEl, this.language.t(this.difficulty));
+    this.setText(this.scoreEl, this.displayedScore.toLocaleString(this.language.locale));
+    this.setText(this.globalScoreEl, this.globalScore.toLocaleString(this.language.locale));
+    this.setText(this.targetEl, this.targetScore.toLocaleString(this.language.locale));
+  }
+
   private animateScore(): void {
     if (typeof cancelAnimationFrame === 'undefined') return;
     cancelAnimationFrame(this.animFrameId);
@@ -133,11 +148,11 @@ export class HUDView implements IHUDView {
       const diff = this.currentScore - this.displayedScore;
       if (diff > 0) {
         this.displayedScore += Math.ceil(diff * 0.15);
-        this.setText(this.scoreEl, this.displayedScore.toLocaleString());
+        this.setText(this.scoreEl, this.displayedScore.toLocaleString(this.language.locale));
         this.animFrameId = requestAnimationFrame(step);
       } else {
         this.displayedScore = this.currentScore;
-        this.setText(this.scoreEl, this.displayedScore.toLocaleString());
+        this.setText(this.scoreEl, this.displayedScore.toLocaleString(this.language.locale));
       }
     };
     this.animFrameId = requestAnimationFrame(step);

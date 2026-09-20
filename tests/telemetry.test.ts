@@ -38,7 +38,7 @@ describe('GameTelemetryService', () => {
       board,
       session,
       deadlockResolver,
-      inputController,
+      isInputLocked: () => inputController.isLocked(),
     });
 
     return { board, session, deadlockResolver, inputController, telemetry };

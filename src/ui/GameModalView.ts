@@ -1,18 +1,9 @@
 import { IGameModalView } from './IGameModalView.ts';
 import { GameOverReason } from '../core/GameSession.ts';
 import { ISoundService } from '../audio/ISoundService.ts';
-import { soundManagerInstance } from '../audio/SoundManager.ts';
+import { SoundManager } from '../audio/SoundManager.ts';
 
-const GAME_OVER_COPY: Record<GameOverReason, { title: string; detail: string }> = {
-  [GameOverReason.OutOfMoves]: {
-    title: '💔 Out of Moves',
-    detail: 'You ran out of moves before reaching the target.',
-  },
-  [GameOverReason.Deadlock]: {
-    title: '🧩 No Moves Possible',
-    detail: 'The board jammed and you had no reshuffles left.',
-  },
-};
+import { LanguageService } from '../i18n/LanguageService.ts';
 
 export class GameModalView implements IGameModalView {
   private modalEl: HTMLElement | null;
@@ -23,13 +14,15 @@ export class GameModalView implements IGameModalView {
   private modalDetail: HTMLElement | null;
   private modalBtn: HTMLElement | null;
   private soundService: ISoundService;
+  private redraw?: () => void;
 
   /**
    * @param onAction Invoked when the player confirms the modal. The caller decides what
    *                 that means for the current state (advance a level or restart the run).
    */
-  constructor(onAction: () => void, soundService: ISoundService = soundManagerInstance) {
+  constructor(onAction: () => void, soundService: ISoundService = new SoundManager(), private readonly language = new LanguageService()) {
     this.soundService = soundService;
+    language.subscribe(() => this.redraw?.());
     this.modalEl = this.findElement('game-modal');
     this.modalTitle = this.findElement('modal-title');
     this.modalScore = this.findElement('modal-final-score');
@@ -48,29 +41,33 @@ export class GameModalView implements IGameModalView {
 
   public showVictory(score: number, level: number, movesSaved: number = 0, globalScore?: number): void {
     this.soundService.playVictory();
-    const savedMsg = movesSaved > 0
-      ? `🎉 ${movesSaved} unused moves banked for Level ${level + 1}!`
-      : `Level ${level + 1} is waiting!`;
-    this.render({
-      title: '🎉 Sweet Victory!',
-      detail: `Level ${level} cleared. ${savedMsg}`,
-      score,
-      globalScore,
-      buttonLabel: 'Next Level →',
-    });
+    this.redraw = () => {
+      const savedMsg = movesSaved > 0
+        ? this.language.t('banked', { moves: movesSaved, level: level + 1 })
+        : this.language.t('nextWaiting', { level: level + 1 });
+      this.render({
+        title: this.language.t('victoryTitle'),
+        detail: this.language.t('cleared', { level }) + ' ' + savedMsg,
+        score, globalScore, buttonLabel: this.language.t('nextLevel'),
+      });
+    };
+    this.redraw();
   }
 
   public showGameOver(score: number, level: number, reason: GameOverReason): void {
-    const copy = GAME_OVER_COPY[reason] ?? GAME_OVER_COPY[GameOverReason.OutOfMoves];
-    this.render({
-      title: copy.title,
-      detail: `${copy.detail} You reached level ${level}.`,
-      score,
-      buttonLabel: 'Try Again',
-    });
+    this.redraw = () => {
+      const deadlock = reason === GameOverReason.Deadlock;
+      this.render({
+        title: this.language.t(deadlock ? 'deadlockTitle' : 'outTitle'),
+        detail: this.language.t(deadlock ? 'deadlockDetail' : 'outDetail') + ' ' + this.language.t('reached', { level }),
+        score, buttonLabel: this.language.t('tryAgain'),
+      });
+    };
+    this.redraw();
   }
 
   public hide(): void {
+    this.redraw = undefined;
     if (this.modalEl) this.modalEl.classList.add('hidden');
   }
 
@@ -83,11 +80,11 @@ export class GameModalView implements IGameModalView {
   }): void {
     if (this.modalTitle) this.modalTitle.textContent = view.title;
     if (this.modalDetail) this.modalDetail.textContent = view.detail;
-    if (this.modalScore) this.modalScore.textContent = view.score.toLocaleString();
+    if (this.modalScore) this.modalScore.textContent = view.score.toLocaleString(this.language.locale);
 
     if (this.modalGlobalContainer && this.modalGlobalScore) {
       if (view.globalScore !== undefined && view.globalScore > 0) {
-        this.modalGlobalScore.textContent = view.globalScore.toLocaleString();
+        this.modalGlobalScore.textContent = view.globalScore.toLocaleString(this.language.locale);
         this.modalGlobalContainer.classList.remove('hidden');
       } else {
         this.modalGlobalContainer.classList.add('hidden');

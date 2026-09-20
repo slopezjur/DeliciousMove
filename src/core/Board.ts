@@ -1,5 +1,12 @@
 import { TileColor, SpecialType, Position, TileData } from './TileTypes.ts';
 
+export interface BoardSnapshot {
+  rows: number;
+  cols: number;
+  nextId: number;
+  tiles: TileData[];
+}
+
 export class Board {
   public readonly rows: number;
   public readonly cols: number;
@@ -57,6 +64,22 @@ export class Board {
     };
     this.set(row, col, tile);
     return tile;
+  }
+
+  public getSnapshot(): BoardSnapshot {
+    const tiles: TileData[] = [];
+    this.forEachTile((tile, row, col) => tiles.push({ ...tile, row, col }));
+    return { rows: this.rows, cols: this.cols, nextId: this.nextId, tiles };
+  }
+
+  /** The persistence boundary validates the snapshot before restoring it. */
+  public restore(snapshot: BoardSnapshot): void {
+    if (snapshot.rows !== this.rows || snapshot.cols !== this.cols) {
+      throw new Error('Saved board dimensions do not match.');
+    }
+    this.clear();
+    for (const tile of snapshot.tiles) this.set(tile.row, tile.col, { ...tile });
+    this.nextId = snapshot.nextId;
   }
 
   public clone(): Board {

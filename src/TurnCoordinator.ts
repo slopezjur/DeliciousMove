@@ -1,10 +1,10 @@
+import { RandomSnapshot } from './core/random/IRandomSource.ts';
 import { Board } from './core/Board.ts';
 import { ICascadeResolver } from './core/CascadeResolver.ts';
 import { IDeadlockResolver } from './core/ShuffleEngine.ts';
 import { IGameSession } from './core/GameSession.ts';
 import { Position, SpecialType } from './core/TileTypes.ts';
 import { IAnimationSequencer } from './view/IAnimationSequencer.ts';
-import { IBoardViewAnimator } from './view/IBoardViewContracts.ts';
 import { IGameTelemetryService } from './core/telemetry/IGameTelemetry.ts';
 
 export interface ITurnCoordinator {
@@ -14,12 +14,12 @@ export interface ITurnCoordinator {
 
 export interface TurnCoordinatorDependencies {
   board: Board;
-  boardView: IBoardViewAnimator;
   animations: IAnimationSequencer;
   cascadeResolver: ICascadeResolver;
   deadlockResolver: IDeadlockResolver;
   session: IGameSession;
   telemetry?: IGameTelemetryService;
+  getRandomSnapshot?: () => RandomSnapshot | undefined;
 }
 
 /**
@@ -28,8 +28,8 @@ export interface TurnCoordinatorDependencies {
  * on abstractions so it can be driven headlessly in tests.
  */
 export class TurnCoordinator implements ITurnCoordinator {
+  private readonly getRandomSnapshot?: () => RandomSnapshot | undefined;
   private readonly board: Board;
-  private readonly boardView: IBoardViewAnimator;
   private readonly animations: IAnimationSequencer;
   private readonly cascadeResolver: ICascadeResolver;
   private readonly deadlockResolver: IDeadlockResolver;
@@ -37,8 +37,8 @@ export class TurnCoordinator implements ITurnCoordinator {
   private readonly telemetry?: IGameTelemetryService;
 
   constructor(deps: TurnCoordinatorDependencies) {
+    this.getRandomSnapshot = deps.getRandomSnapshot;
     this.board = deps.board;
-    this.boardView = deps.boardView;
     this.animations = deps.animations;
     this.cascadeResolver = deps.cascadeResolver;
     this.deadlockResolver = deps.deadlockResolver;
@@ -58,30 +58,32 @@ export class TurnCoordinator implements ITurnCoordinator {
 
     // Rocks are completely static obstacles: swapping with a rock is forbidden
     if (tileA.special === SpecialType.Rock || tileB.special === SpecialType.Rock) {
-      const spriteA = this.boardView.getTileSprite(tileA.id);
-      const spriteB = this.boardView.getTileSprite(tileB.id);
-      const candySprite = tileA.special === SpecialType.Rock ? spriteB : spriteA;
-      if (candySprite && this.animations.animateForbiddenMove) {
-        await this.animations.animateForbiddenMove(candySprite);
+      const candy = tileA.special === SpecialType.Rock ? tileB : tileA;
+      if (candy.special !== SpecialType.Rock) {
+        await this.animations.animateForbiddenMove?.(candy.id);
       }
       this.telemetry?.recordSwap(from, to, false, 0, 0);
       return false;
     }
 
-    const spriteA = this.boardView.getTileSprite(tileA.id);
-    const spriteB = this.boardView.getTileSprite(tileB.id);
-    if (!spriteA || !spriteB) return false;
-
+    const boardBefore = this.board.getSnapshot();
+    const sessionBefore = this.session.getSnapshot();
+    const randomBefore = this.getRandomSnapshot?.();
     // 1. Show the swap before the model commits to it.
-    await this.animations.animateSwap(spriteA, spriteB, from, to);
+    await this.animations.animateSwap(tileA.id, tileB.id, from, to);
 
     const avoidMatches = this.session.isTargetReached();
     const result = this.cascadeResolver.resolveSwap(this.board, from, to, avoidMatches);
     if (!result.valid) {
-      await this.animations.animateSwap(spriteA, spriteB, to, from);
+      await this.animations.animateSwap(tileA.id, tileB.id, to, from);
       this.telemetry?.recordSwap(from, to, false, 0, 0);
       return false;
     }
+
+    this.telemetry?.recordTurnDetails?.({
+      boardBefore, sessionBefore, randomBefore, from, to,
+      boardAfter: this.board.getSnapshot(), steps: result.steps,
+    });
 
     // 2. Valid move: charge it and play out the cascade.
     const scoreBefore = this.session.getScore();
@@ -109,10 +111,17 @@ export class TurnCoordinator implements ITurnCoordinator {
     const tile = this.board.get(pos.row, pos.col);
     if (!tile || tile.special === SpecialType.None || tile.special === SpecialType.Rock) return false;
 
+    const boardBefore = this.board.getSnapshot();
+    const sessionBefore = this.session.getSnapshot();
+    const randomBefore = this.getRandomSnapshot?.();
     const spec = tile.special;
     const avoidMatches = this.session.isTargetReached();
     const result = this.cascadeResolver.resolveActivation(this.board, pos, avoidMatches);
     if (!result.valid) return false;
+    this.telemetry?.recordTurnDetails?.({
+      boardBefore, sessionBefore, randomBefore, from: pos,
+      boardAfter: this.board.getSnapshot(), steps: result.steps,
+    });
 
     const scoreBefore = this.session.getScore();
     this.session.onMoveInitiated();

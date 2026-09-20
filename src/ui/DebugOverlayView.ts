@@ -1,3 +1,4 @@
+import { LanguageService } from '../i18n/LanguageService.ts';
 import { IGameTelemetryService } from '../core/telemetry/IGameTelemetry.ts';
 import { IDebugOverlayView } from './IDebugOverlayView.ts';
 import { IClipboardService } from './IClipboardService.ts';
@@ -21,12 +22,14 @@ export class DebugOverlayView implements IDebugOverlayView {
   constructor(
     telemetry: IGameTelemetryService,
     callbacks: DebugOverlayCallbacks,
-    clipboardService: IClipboardService = new BrowserClipboardService()
+    clipboardService: IClipboardService = new BrowserClipboardService(),
+    private readonly language = new LanguageService()
   ) {
     this.telemetry = telemetry;
     this.callbacks = callbacks;
     this.clipboardService = clipboardService;
 
+    language.subscribe(() => this.refresh());
     this.initElements();
     this.bindKeyboardShortcut();
   }
@@ -45,10 +48,10 @@ export class DebugOverlayView implements IDebugOverlayView {
       const success = await this.copyToClipboard();
       const btn = document.getElementById('debug-btn-copy');
       if (btn) {
-        const orig = btn.textContent;
-        btn.textContent = success ? '✅ Copied!' : '❌ Copy Failed';
+
+        btn.textContent = this.language.t(success ? 'copied' : 'copyFailed');
         setTimeout(() => {
-          btn.textContent = orig;
+          btn.textContent = this.language.t('copy');
         }, 1500);
       }
     });
@@ -103,7 +106,7 @@ export class DebugOverlayView implements IDebugOverlayView {
 
     const specialsStr = Object.entries(snap.specialsOnBoard)
       .map(([k, v]) => `${k}: ${v}`)
-      .join(', ') || 'None';
+      .join(', ') || this.language.t('none');
 
     const recentRows = snap.recentMoves
       .slice(-8)
@@ -134,55 +137,55 @@ export class DebugOverlayView implements IDebugOverlayView {
     this.contentEl.innerHTML = `
       <div class="dbg-grid">
         <div class="dbg-card">
-          <span class="dbg-label">State</span>
-          <span class="dbg-val ${snap.isInputLocked ? 'dbg-warn' : ''}">${snap.state} (Locked: ${snap.isInputLocked})</span>
+          <span class="dbg-label">${this.language.t('state')}</span>
+          <span class="dbg-val ${snap.isInputLocked ? 'dbg-warn' : ''}">${snap.state} (${this.language.t('locked')}: ${snap.isInputLocked})</span>
         </div>
         <div class="dbg-card">
-          <span class="dbg-label">Level / Diff</span>
-          <span class="dbg-val">L${snap.level} (${snap.difficulty.toUpperCase()})</span>
+          <span class="dbg-label">${this.language.t('levelDifficulty')}</span>
+          <span class="dbg-val">L${snap.level} (${this.language.t(snap.difficulty)})</span>
         </div>
         <div class="dbg-card">
-          <span class="dbg-label">Moves Left</span>
-          <span class="dbg-val">${snap.movesLeft} (Banked: ${snap.accumulatedBonusMoves})</span>
+          <span class="dbg-label">${this.language.t('movesLeft')}</span>
+          <span class="dbg-val">${snap.movesLeft} (${this.language.t('bank')}: ${snap.accumulatedBonusMoves})</span>
         </div>
         <div class="dbg-card">
-          <span class="dbg-label">Possible Moves</span>
+          <span class="dbg-label">${this.language.t('possibleMoves')}</span>
           <span class="dbg-val ${snap.possibleMovesCount === 0 ? 'dbg-danger' : ''}">${snap.possibleMovesCount}</span>
         </div>
         <div class="dbg-card" style="grid-column: span 2;">
-          <span class="dbg-label">Score / Target</span>
-          <span class="dbg-val">${snap.score.toLocaleString()} / ${snap.targetScore.toLocaleString()}</span>
+          <span class="dbg-label">${this.language.t('scoreTarget')}</span>
+          <span class="dbg-val">${snap.score.toLocaleString(this.language.locale)} / ${snap.targetScore.toLocaleString(this.language.locale)}</span>
         </div>
         <div class="dbg-card" style="grid-column: span 2;">
-          <span class="dbg-label">Specials on Board</span>
+          <span class="dbg-label">${this.language.t('boardSpecials')}</span>
           <span class="dbg-val">${specialsStr}</span>
         </div>
       </div>
 
       <div class="dbg-section">
-        <div class="dbg-section-title">Recent Moves (Last 8)</div>
+        <div class="dbg-section-title">${this.language.t('recentMoves')}</div>
         <div class="dbg-table-wrap">
           <table class="dbg-table">
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Action</th>
-                <th>Pos</th>
+                <th>${this.language.t('time')}</th>
+                <th>${this.language.t('action')}</th>
+                <th>${this.language.t('position')}</th>
                 <th>OK</th>
-                <th>Score</th>
-                <th>Steps</th>
-                <th>Specials</th>
+                <th>${this.language.t('score')}</th>
+                <th>${this.language.t('steps')}</th>
+                <th>${this.language.t('specials')}</th>
               </tr>
             </thead>
             <tbody>
-              ${recentRows || '<tr><td colspan="7" style="text-align:center;">No moves recorded yet</td></tr>'}
+              ${recentRows || '<tr><td colspan="7" style="text-align:center;">' + this.language.t('noMoves') + '</td></tr>'}
             </tbody>
           </table>
         </div>
       </div>
 
       <div class="dbg-section">
-        <div class="dbg-section-title">Board Grid ASCII Dump</div>
+        <div class="dbg-section-title">${this.language.t('boardDump')}</div>
         <pre class="dbg-ascii">${snap.boardAscii}</pre>
       </div>
     `;

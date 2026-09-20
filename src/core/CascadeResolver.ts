@@ -261,6 +261,9 @@ export class CascadeResolver implements ICascadeResolver {
     multiplier: number,
     avoidMatches = false
   ): CascadeStep {
+    // Capture blast origins before gravity can move any surviving source tiles.
+    const effectSnapshots = structuredClone(triggeredEffects);
+
     // 1. Clear destroyed tiles from the board
     board.forEachTile((t, r, c) => {
       if (destroyedIds.has(t.id)) {
@@ -272,15 +275,16 @@ export class CascadeResolver implements ICascadeResolver {
     const spawns = this.tileSpawner.refillEmptySlots(board, avoidMatches);
     const scoreGained = this.scoreCalculator.calculateStepScore(destroyedIds.size, multiplier);
 
-    return {
+    // Playback must never observe mutations from later cascade steps.
+    return structuredClone({
       matchedTileIds: Array.from(destroyedIds),
       spawnedSpecials,
       evolutions: evolutions.length > 0 ? evolutions : undefined,
       drops,
       spawns,
       scoreGained,
-      triggeredSpecials: triggeredEffects,
-    };
+      triggeredSpecials: effectSnapshots,
+    });
   }
 
   /**

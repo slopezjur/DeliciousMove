@@ -1,8 +1,7 @@
 import { Board } from '../core/Board.ts';
 import { IDeadlockResolver } from '../core/ShuffleEngine.ts';
 import { IGameSession } from '../core/GameSession.ts';
-import { IBoardViewAnimator } from '../view/IBoardViewContracts.ts';
-import { IAnimationSequencer } from '../view/IAnimationSequencer.ts';
+import { IHintAnimator } from '../view/IAnimationSequencer.ts';
 import { SpecialType } from '../core/TileTypes.ts';
 import { IIdleHintController } from './IIdleHintController.ts';
 
@@ -15,10 +14,9 @@ export class IdleHintController implements IIdleHintController {
 
   constructor(
     private readonly board: Board,
-    private readonly boardView: IBoardViewAnimator,
-    private readonly deadlockResolver: IDeadlockResolver,
-    private readonly session: IGameSession,
-    private readonly animations: IAnimationSequencer,
+    private readonly deadlockResolver: Pick<IDeadlockResolver, 'findPossibleMoves'>,
+    private readonly session: Pick<IGameSession, 'canMakeMove'>,
+    private readonly animations: IHintAnimator,
     private readonly idleDelayMs: number = IDLE_HINT_DELAY_MS,
     private readonly repeatDelayMs: number = IDLE_HINT_REPEAT_MS
   ) {}
@@ -59,12 +57,7 @@ export class IdleHintController implements IIdleHintController {
       const tileA = this.board.get(move.from.row, move.from.col);
       const tileB = this.board.get(move.to.row, move.to.col);
       if (tileA && tileB) {
-        const spriteA = this.boardView.getTileSprite(tileA.id);
-        const spriteB = this.boardView.getTileSprite(tileB.id);
-        const sprites = [spriteA, spriteB].filter((s): s is NonNullable<typeof s> => Boolean(s));
-        if (sprites.length > 0) {
-          this.animations.animateHint?.(sprites);
-        }
+        this.animations.animateHint([tileA.id, tileB.id]);
       }
     } else {
       // 2. Or check any activatable specials on the board
@@ -76,10 +69,7 @@ export class IdleHintController implements IIdleHintController {
       });
       if (specials.length > 0) {
         const randomId = specials[Math.floor(Math.random() * specials.length)];
-        const sprite = this.boardView.getTileSprite(randomId);
-        if (sprite) {
-          this.animations.animateHint?.([sprite]);
-        }
+        this.animations.animateHint([randomId]);
       }
     }
 

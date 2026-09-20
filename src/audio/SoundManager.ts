@@ -5,10 +5,10 @@ import { ISoundService } from './ISoundService.ts';
  * Guarantees zero asset loading failures, instant response, and rising pitch on combos.
  */
 export class SoundManager implements ISoundService {
-  private static ctx: AudioContext | null = null;
-  private static muted: boolean = false;
+  private ctx: AudioContext | null = null;
+  private muted: boolean = false;
 
-  private static pentatonicNotes = [
+  private pentatonicNotes = [
     261.63, // C4
     293.66, // D4
     329.63, // E4
@@ -22,9 +22,9 @@ export class SoundManager implements ISoundService {
     1046.50 // C6
   ];
 
-  public static init(): void {
+  public init(): void {
     if (!this.ctx && typeof window !== 'undefined') {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
       }
@@ -34,16 +34,16 @@ export class SoundManager implements ISoundService {
     }
   }
 
-  public static toggleMute(): boolean {
+  public toggleMute(): boolean {
     this.muted = !this.muted;
     return this.muted;
   }
 
-  public static isMuted(): boolean {
+  public isMuted(): boolean {
     return this.muted;
   }
 
-  public static playSwap(): void {
+  public playSwap(): void {
     if (this.muted) return;
     this.init();
     if (!this.ctx) return;
@@ -66,7 +66,7 @@ export class SoundManager implements ISoundService {
     osc.stop(now + 0.08);
   }
 
-  public static playMatch(combo = 1): void {
+  public playMatch(combo = 1): void {
     if (this.muted) return;
     this.init();
     if (!this.ctx) return;
@@ -99,7 +99,7 @@ export class SoundManager implements ISoundService {
     osc2.stop(now + 0.25);
   }
 
-  public static playSpecialLaser(): void {
+  public playSpecialLaser(): void {
     if (this.muted) return;
     this.init();
     if (!this.ctx) return;
@@ -122,7 +122,7 @@ export class SoundManager implements ISoundService {
     osc.stop(now + 0.22);
   }
 
-  public static playBombExplosion(): void {
+  public playBombExplosion(): void {
     if (this.muted) return;
     this.init();
     if (!this.ctx) return;
@@ -147,7 +147,7 @@ export class SoundManager implements ISoundService {
     osc.stop(now + 0.4);
   }
 
-  public static playVictory(): void {
+  public playVictory(): void {
     if (this.muted) return;
     this.init();
     if (!this.ctx) return;
@@ -174,7 +174,7 @@ export class SoundManager implements ISoundService {
     });
   }
 
-  public static playShuffle(): void {
+  public playShuffle(): void {
     if (this.muted) return;
     this.init();
     if (!this.ctx) return;
@@ -199,7 +199,7 @@ export class SoundManager implements ISoundService {
     }
   }
 
-  public static playAirplaneFly(): void {
+  public playAirplaneFly(): void {
     if (this.muted) return;
     this.init();
     if (!this.ctx) return;
@@ -223,17 +223,4 @@ export class SoundManager implements ISoundService {
     osc.start(now);
     osc.stop(now + 0.35);
   }
-
-  // Instance methods satisfying ISoundService for DI
-  public playSwap(): void { SoundManager.playSwap(); }
-  public playMatch(combo?: number): void { SoundManager.playMatch(combo); }
-  public playSpecialLaser(): void { SoundManager.playSpecialLaser(); }
-  public playBombExplosion(): void { SoundManager.playBombExplosion(); }
-  public playVictory(): void { SoundManager.playVictory(); }
-  public playShuffle(): void { SoundManager.playShuffle(); }
-  public playAirplaneFly(): void { SoundManager.playAirplaneFly(); }
-  public toggleMute(): boolean { return SoundManager.toggleMute(); }
-  public isMuted(): boolean { return SoundManager.isMuted(); }
 }
-
-export const soundManagerInstance: ISoundService = new SoundManager();

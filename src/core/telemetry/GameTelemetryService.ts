@@ -1,13 +1,13 @@
 import { Board } from '../Board.ts';
 import { IGameSession } from '../GameSession.ts';
 import { IDeadlockResolver } from '../ShuffleEngine.ts';
-import { IInputController } from '../../input/InputController.ts';
 import { Position, SpecialType, TileColor } from '../TileTypes.ts';
 import {
   IGameTelemetryService,
   TelemetryActionType,
   TelemetryMoveRecord,
   TelemetryStateSnapshot,
+  TurnReplayDetails,
 } from './IGameTelemetry.ts';
 
 const MAX_HISTORY_SIZE = 25;
@@ -16,16 +16,21 @@ export interface GameTelemetryDependencies {
   board: Board;
   session: IGameSession;
   deadlockResolver: IDeadlockResolver;
-  inputController: IInputController;
+  isInputLocked: () => boolean;
 }
 
 export class GameTelemetryService implements IGameTelemetryService {
   private readonly deps: GameTelemetryDependencies;
   private readonly history: TelemetryMoveRecord[] = [];
   private sequenceCounter = 0;
+  private lastTurn?: TurnReplayDetails;
 
   constructor(deps: GameTelemetryDependencies) {
     this.deps = deps;
+  }
+
+  public recordTurnDetails(details: TurnReplayDetails): void {
+    this.lastTurn = structuredClone(details);
   }
 
   public recordSwap(
@@ -37,7 +42,10 @@ export class GameTelemetryService implements IGameTelemetryService {
     specialsFormed: string[] = [],
     specialsTriggered: string[] = []
   ): void {
-    const tileFrom = this.deps.board.get(from.row, from.col);
+    const replay = valid && this.lastTurn?.from.row === from.row && this.lastTurn?.from.col === from.col
+      && this.lastTurn.to?.row === to.row && this.lastTurn.to?.col === to.col ? this.lastTurn : undefined;
+    const tileFrom = replay?.boardBefore.tiles.find((tile) => tile.row === from.row && tile.col === from.col)
+      ?? this.deps.board.get(from.row, from.col);
     this.pushRecord({
       id: ++this.sequenceCounter,
       timestamp: new Date().toISOString().substring(11, 23),
@@ -90,6 +98,7 @@ export class GameTelemetryService implements IGameTelemetryService {
   }
 
   public recordStateTransition(action: TelemetryActionType, notes?: string): void {
+    if (action === 'level_start') this.lastTurn = undefined;
     this.pushRecord({
       id: ++this.sequenceCounter,
       timestamp: new Date().toISOString().substring(11, 23),
@@ -108,7 +117,7 @@ export class GameTelemetryService implements IGameTelemetryService {
   }
 
   public getSnapshot(): TelemetryStateSnapshot {
-    const { board, session, deadlockResolver, inputController } = this.deps;
+    const { board, session, deadlockResolver, isInputLocked } = this.deps;
     const config = session.getLevelConfig();
 
     const specialsOnBoard: Record<string, number> = {};
@@ -127,10 +136,11 @@ export class GameTelemetryService implements IGameTelemetryService {
 
     return {
       timestamp: new Date().toISOString(),
+      lastTurn: this.lastTurn ? structuredClone(this.lastTurn) : undefined,
       level: session.getLevel(),
       difficulty: config.difficulty,
       state: session.getState(),
-      isInputLocked: inputController.isLocked(),
+      isInputLocked: isInputLocked(),
       score: session.getScore(),
       targetScore: session.getTargetScore(),
       movesLeft: session.getMovesLeft(),

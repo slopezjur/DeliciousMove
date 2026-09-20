@@ -10,7 +10,7 @@ export class TileSprite extends Container {
 
   constructor(tileData: TileData, tileSize: number) {
     super();
-    this.tileData = tileData;
+    this.tileData = { ...tileData };
     this.tileSize = tileSize;
 
     // Candy vector graphic using shared GraphicsContext

@@ -1,5 +1,4 @@
 import { CascadeStep, Position } from '../core/TileTypes.ts';
-import { TileSprite } from './TileSprite.ts';
 
 /**
  * Playback contract the turn coordinator depends on, so orchestration never binds to a
@@ -7,13 +6,17 @@ import { TileSprite } from './TileSprite.ts';
  */
 export interface IAnimationSequencer {
   animateSwap(
-    spriteA: TileSprite,
-    spriteB: TileSprite,
+    tileAId: number,
+    tileBId: number,
     posA: Position,
     posB: Position
   ): Promise<void>;
   playCascadeSteps(steps: CascadeStep[], onScoreGained: (score: number) => void): Promise<void>;
   animateShuffle(tileMappings: Map<number, Position>): Promise<void>;
-  animateHint?(sprites: TileSprite[]): void;
-  animateForbiddenMove?(sprite: TileSprite): Promise<void>;
+  animateForbiddenMove?(tileId: number): Promise<void>;
+}
+
+/** Hints require tile IDs only, with no access to turn playback or renderer objects. */
+export interface IHintAnimator {
+  animateHint(tileIds: readonly number[]): void;
 }

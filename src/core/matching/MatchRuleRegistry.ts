@@ -118,6 +118,18 @@ export class IntersectionWrappedRule implements IMatchRule {
 export class StripedRule implements IMatchRule {
   public readonly priority = 300;
 
+  /** Only matches touched by the player's swap inherit its axis. Cascades use the run. */
+  private stripeType(tiles: TileData[], positions: Position[], fallback: SpecialType): SpecialType {
+    const [from, to] = positions;
+    if (positions.length !== 2 || !from || !to) return fallback;
+    const dr = Math.abs(to.row - from.row);
+    const dc = Math.abs(to.col - from.col);
+    if (dr + dc !== 1 || !tiles.some((tile) =>
+      positions.some((pos) => tile.row === pos.row && tile.col === pos.col)
+    )) return fallback;
+    return dr === 1 ? SpecialType.StripedVertical : SpecialType.StripedHorizontal;
+  }
+
   public evaluate(ctx: MatchEvaluationContext): MatchGroup[] {
     const { hRuns, vRuns, consumedH, consumedV, interactionPositions, consumedTileIds } = ctx;
     const matches: MatchGroup[] = [];
@@ -132,7 +144,7 @@ export class StripedRule implements IMatchRule {
           tiles: h.tiles,
           color: h.color,
           spawnSpecial: {
-            type: SpecialType.StripedHorizontal,
+            type: this.stripeType(h.tiles, interactionPositions, SpecialType.StripedHorizontal),
             position: spawnPos,
             color: h.color,
           },
@@ -150,7 +162,7 @@ export class StripedRule implements IMatchRule {
           tiles: v.tiles,
           color: v.color,
           spawnSpecial: {
-            type: SpecialType.StripedVertical,
+            type: this.stripeType(v.tiles, interactionPositions, SpecialType.StripedVertical),
             position: spawnPos,
             color: v.color,
           },

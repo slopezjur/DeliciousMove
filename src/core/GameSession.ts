@@ -40,7 +40,20 @@ export interface GameSessionListener {
   onStateChanged?: (newState: GameState, snapshot: SessionSnapshot) => void;
 }
 
+export interface SessionSaveState {
+  config: LevelConfig;
+  score: number;
+  globalScore: number;
+  movesLeft: number;
+  shufflesLeft: number;
+  accumulatedMoves: number;
+  state: GameState.Ready | GameState.Victory | GameState.GameOver;
+  reason?: GameOverReason;
+}
+
 export interface IGameSession {
+  exportState(): SessionSaveState;
+  restore(saved: SessionSaveState): void;
   addListener(listener: GameSessionListener): () => void;
   restart(): void;
   advanceLevel(): void;
@@ -85,6 +98,27 @@ export class GameSession implements IGameSession {
     this.config = this.progression.getConfig(startLevel);
     this.movesLeft = this.config.moves;
     this.shufflesLeft = this.config.shuffles;
+  }
+
+  public exportState(): SessionSaveState {
+    if (this.state === GameState.Resolving) throw new Error('Cannot save an unfinished turn.');
+    return {
+      config: { ...this.config }, score: this.currentScore, globalScore: this.globalScore,
+      movesLeft: this.movesLeft, shufflesLeft: this.shufflesLeft,
+      accumulatedMoves: this.accumulatedMoves, state: this.state, reason: this.gameOverReason,
+    };
+  }
+
+  /** Restore silently; the application rebuilds presentation without starting a new level. */
+  public restore(saved: SessionSaveState): void {
+    this.config = { ...saved.config };
+    this.currentScore = saved.score;
+    this.globalScore = saved.globalScore;
+    this.movesLeft = saved.movesLeft;
+    this.shufflesLeft = saved.shufflesLeft;
+    this.accumulatedMoves = saved.accumulatedMoves;
+    this.state = saved.state;
+    this.gameOverReason = saved.reason;
   }
 
   public addListener(listener: GameSessionListener): () => void {

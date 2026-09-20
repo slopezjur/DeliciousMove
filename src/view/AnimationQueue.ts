@@ -1,25 +1,27 @@
 import gsap from 'gsap';
 import { IBoardViewAnimator } from './IBoardViewContracts.ts';
-import { IAnimationSequencer } from './IAnimationSequencer.ts';
-import { TileSprite } from './TileSprite.ts';
+import { IAnimationSequencer, IHintAnimator } from './IAnimationSequencer.ts';
 import { CascadeStep, Position } from '../core/TileTypes.ts';
 import { ISoundService } from '../audio/ISoundService.ts';
-import { soundManagerInstance } from '../audio/SoundManager.ts';
+import { SoundManager } from '../audio/SoundManager.ts';
 import { IEffectPresenterRegistry } from './vfx/IEffectPresenter.ts';
 import { EffectPresenterRegistry } from './vfx/EffectPresenterRegistry.ts';
 
-const COMBO_PRAISE_THRESHOLD = 4;
-const COMBO_PRAISES = ['DELICIOUS!', 'TASTY!', 'SUGAR CRUSH!', 'SWEET!'];
+import { LanguageService, MessageKey } from '../i18n/LanguageService.ts';
 
-export class AnimationQueue implements IAnimationSequencer {
+const COMBO_PRAISE_THRESHOLD = 4;
+const COMBO_PRAISES: MessageKey[] = ['delicious', 'tasty', 'sugarCrush', 'sweet'];
+
+export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
   private boardView: IBoardViewAnimator;
   private soundService: ISoundService;
   private effectPresenters: IEffectPresenterRegistry;
 
   constructor(
     boardView: IBoardViewAnimator,
-    soundService: ISoundService = soundManagerInstance,
-    effectPresenters: IEffectPresenterRegistry = new EffectPresenterRegistry()
+    soundService: ISoundService = new SoundManager(),
+    effectPresenters: IEffectPresenterRegistry = new EffectPresenterRegistry(),
+    private readonly language = new LanguageService()
   ) {
     this.boardView = boardView;
     this.soundService = soundService;
@@ -30,11 +32,14 @@ export class AnimationQueue implements IAnimationSequencer {
    * Animates two sprites swapping positions.
    */
   public animateSwap(
-    spriteA: TileSprite,
-    spriteB: TileSprite,
+    tileAId: number,
+    tileBId: number,
     posA: Position,
     posB: Position
   ): Promise<void> {
+    const spriteA = this.boardView.getTileSprite(tileAId);
+    const spriteB = this.boardView.getTileSprite(tileBId);
+    if (!spriteA || !spriteB) return Promise.reject(new Error('Swap sprites are missing.'));
     return new Promise((resolve) => {
       gsap.killTweensOf(spriteA);
       gsap.killTweensOf(spriteA.scale);
@@ -89,7 +94,7 @@ export class AnimationQueue implements IAnimationSequencer {
 
       if (combo >= COMBO_PRAISE_THRESHOLD) {
         const center = this.getBoardCenter();
-        const word = COMBO_PRAISES[(combo - COMBO_PRAISE_THRESHOLD) % COMBO_PRAISES.length];
+        const word = this.language.t(COMBO_PRAISES[(combo - COMBO_PRAISE_THRESHOLD) % COMBO_PRAISES.length]);
         this.boardView.vfx.createFloatingText(center.x, center.y, word, 0xffd700);
         this.boardView.screenShake(8);
       }
@@ -418,7 +423,7 @@ export class AnimationQueue implements IAnimationSequencer {
       this.soundService.playShuffle();
       const { x: centerX, y: centerY } = this.getBoardCenter();
 
-      this.boardView.vfx.createFloatingText(centerX, centerY, 'SHUFFLE!', 0x00e5ff);
+      this.boardView.vfx.createFloatingText(centerX, centerY, this.language.t('shuffle'), 0x00e5ff);
 
       const tl = gsap.timeline({ onComplete: resolve });
 
@@ -460,8 +465,10 @@ export class AnimationQueue implements IAnimationSequencer {
     });
   }
 
-  public animateHint(sprites: TileSprite[]): void {
-    sprites.forEach((sprite) => {
+  public animateHint(tileIds: readonly number[]): void {
+    tileIds.forEach((id) => {
+      const sprite = this.boardView.getTileSprite(id);
+      if (!sprite) return;
       gsap.killTweensOf(sprite);
       gsap.killTweensOf(sprite.scale);
       const startX = sprite.x;
@@ -481,7 +488,9 @@ export class AnimationQueue implements IAnimationSequencer {
     });
   }
 
-  public animateForbiddenMove(sprite: TileSprite): Promise<void> {
+  public animateForbiddenMove(tileId: number): Promise<void> {
+    const sprite = this.boardView.getTileSprite(tileId);
+    if (!sprite) return Promise.resolve();
     return new Promise((resolve) => {
       gsap.killTweensOf(sprite);
       gsap.killTweensOf(sprite.scale);

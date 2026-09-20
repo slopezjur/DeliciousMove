@@ -14,7 +14,6 @@ import { GameSession } from '../src/core/GameSession.ts';
 import { InfiniteLevelProgression } from '../src/core/LevelProgression.ts';
 import { IDeadlockResolver } from '../src/core/ShuffleEngine.ts';
 import { IAnimationSequencer } from '../src/view/IAnimationSequencer.ts';
-import { IBoardViewAnimator } from '../src/view/IBoardViewContracts.ts';
 
 function createFixedBoard(): Board {
   const board = new Board(8, 8);
@@ -151,24 +150,8 @@ describe('2x2 Airplane & Free Special Activation Tests', () => {
         playCascadeSteps: vi.fn(),
       };
 
-      const fakeBoardView: IBoardViewAnimator = {
-        board,
-        tileSize: 64,
-        boardPixelWidth: 512,
-        boardPixelHeight: 512,
-        vfx: {} as any,
-        gridToLocal: () => ({ x: 0, y: 0 }),
-        getTileSprite: () => undefined,
-        addTileSprite: () => ({} as any),
-        removeTileSprite: vi.fn(),
-        getTileSpritesMap: () => new Map(),
-        screenShake: vi.fn(),
-        syncSpritesWithBoard: vi.fn(),
-      };
-
       const coordinator = new TurnCoordinator({
         board,
-        boardView: fakeBoardView,
         animations: fakeAnim,
         cascadeResolver,
         deadlockResolver: fakeDeadlock,
