@@ -5,7 +5,8 @@ The core supports deterministic simulation when supplied with a seeded random so
 
 ## Run locally
 
-Install Node.js and npm, then run:
+Use Node.js 20 to match the GitHub Actions test/build runtime. Node.js 24 is also
+verified locally. Install npm with Node.js, then run:
 
 ```sh
 npm ci
@@ -23,6 +24,13 @@ npm run preview  # Serve the production bundle locally
 
 The GitHub Pages workflow in `.github/workflows/deploy.yml` tests, builds, and
 deploys pushes to `main`. Enable GitHub Actions as the Pages source in repository settings.
+
+Vitest runs in a headless Node environment. `vitest.config.ts` loads
+`tests/setup.ts` before test modules: it supplies the minimal `navigator` fixture
+required by Pixi's import-time browser detection and reinstalls it before each test.
+Do not rely on browser globals supplied by newer Node versions; tests must also
+pass on the workflow's Node 20 runtime. This fixture is test-only and does not
+change browser language detection in the game.
 
 ## Controls and matching
 
