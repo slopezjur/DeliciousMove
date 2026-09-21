@@ -7,12 +7,15 @@ Only a completed level creates a checkpoint, after its final animations and bonu
 phase finish. Ordinary moves, completing objectives, rescue shuffles, a loss,
 and starting the next level do not overwrite that checkpoint.
 
-Reloading restores the last completed level's victory screen. Choose **Next Level**
-to continue with its banked moves and global score. An unfinished level is restarted
-from that checkpoint, not resumed mid-level. Before the first victory there is no
-checkpoint. **New Game** asks for confirmation, archives the previous checkpoint,
-and removes it from automatic resume; the new run saves after its first victory.
-**Play Again** after losing also starts a new run and archives the prior checkpoint.
+Reloading restores the victory screen if the next level has not started. Otherwise,
+the next level restarts using the checkpoint's global score and the resource ledger's
+remaining bank. Board, objectives, base moves and shuffles restart; no mid-level board
+is resumed. A recorded failure restores the retry screen without charging twice.
+Before the first victory there is no checkpoint; level 1 uses the same life ledger.
+**New Game** asks for confirmation, archives the previous checkpoint, and removes it
+from automatic resume; the new run saves after its first victory. It does not refill
+lives. **Retry level** retains the run and resets only the failed level; its earned
+score is discarded and spent bank moves are not refunded.
 
 Language is an independent preference: the primary browser language selects Spanish
 for `es` / `es-*`, with English as the fallback. The language selector in Settings shows the current choice; it or **L** overrides
@@ -31,6 +34,24 @@ continues and the HUD explains that saving is unavailable.
 - `deliciousmove.save.recovery.<timestamp>[.<suffix>]`: originals archived by explicit restart.
 - `deliciousmove.language`: explicit `en` or `es` preference.
 - `deliciousmove.records`: version-1 lifetime records (`bestLevel`, `bestScore`).
+- `deliciousmove.resources`: version-1 consumable ledger (`lives`, `nextLifeAt`,
+  `observedAt`, optional `attempt` containing checkpoint identity, level, remaining
+  `bank`, and an optional failure reason). This is not a board checkpoint.
+
+`PlayerResources` owns an injectable wall clock. Lives start/cap at five and regenerate
+once per 1,800,000 ms, including offline. Full lives do not accumulate extra regeneration
+credit; another failure preserves an already-running deadline. Clock rollback cannot
+advance regeneration. Failure is recorded once for the current attempt; retry clears
+its failure marker without charging. The checkpoint identity is its timestamp and level
+(or `new` before the first victory). Only a matching attempt ledger can resume that run.
+Bank spending is persisted immediately, independently of the completed-level checkpoint.
+New Game clears the attempt, not the lives or regeneration deadline. This is local
+convenience storage, not a server-authoritative anti-cheat system.
+
+Malformed or newer resource formats are preserved and automatic resource writes pause,
+with a HUD warning; gameplay continues with in-memory resources. A future resource-format
+change must add an explicit version migration with clock, bank, and idempotency fixtures
+before permitting writes. Blocked storage similarly falls back to in-memory state.
 
 Records mean highest **completed** level and highest cumulative score at a completed
 level. They update after victory playback, never during an unfinished level or a loss.
@@ -61,7 +82,7 @@ original before allowing a new checkpoint.
 
 ## Adding a breaking change
 
-The current save format is **schema 2 / rules 3**. Installed 1→2 migrations retain
+The current save format is **schema 3 / rules 4**. Installed 1→2 migrations retain
 the original board, score, level, banked moves, global score, and RNG. A legacy
 checkpoint receives an explicit score objective and matching progress. Missing
 terrain means a full rectangle. It still resumes at its victory screen; only
@@ -69,10 +90,15 @@ advancing to the next level selects a new objective/layout family.
 The rules 2→3 migration retains the saved level's original requirements and completion
 state. Only newly generated levels add mandatory minimum score alongside the feature
 objectives. Already completed jelly/ice levels are never made incomplete retroactively.
+Schema 2→3 splits the old total move count into `levelMovesLeft` and remaining
+`accumulatedMoves`: base = max(0, old total - old initial bank), bank = min(old initial
+bank, old total). Their sum must equal `movesLeft`; base cannot exceed the saved level
+allowance. Rules 3→4 preserves existing checkpoint configuration and completion. New
+levels/retries use the lower move allowances and incidental-special protection rules.
 
 Migration occurs in memory on load and never rewrites the original raw checkpoint.
-The next completed-level save writes schema 2 / rules 3 and rotates the readable original to backup.
-Clients running v1 must reject v2 saves rather than reinterpret new cell/object data.
+The next completed-level save writes schema 3 / rules 4 and rotates the readable original to backup.
+Older clients must reject newer saves rather than reinterpret their counters or cell/object data.
 Old diagnostic turn replays may produce different results after a gameplay bug fix;
 exact replay still requires the game revision that produced the report.
 
@@ -93,16 +119,16 @@ Example of a future field rename (illustrative, not an installed migration):
 
 ```ts
 const schemaMigrations: MigrationRegistry = new Map([
-  [2, (old) => {
+  [3, (old) => {
     const { savedAt, ...rest } = old;
-    return { ...rest, checkpointAt: savedAt, schemaVersion: 3 };
+    return { ...rest, checkpointAt: savedAt, schemaVersion: 4 };
   }],
 ]);
 ```
 
 That example also requires updating the current interface, validator and writer to
-use `checkpointAt`, setting the current schema to 3, and extending the existing
-default registry without removing the 1→2 migration. Constructor injection allows fixture testing against future
+use `checkpointAt`, setting the current schema to 4, and extending the existing
+default registry without removing earlier migrations. Constructor injection allows fixture testing against future
 versions without changing production defaults.
 
 Missing migration paths deliberately suspend writes. A client from an older release

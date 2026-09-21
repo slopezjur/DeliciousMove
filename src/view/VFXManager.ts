@@ -1,10 +1,12 @@
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import gsap from 'gsap';
+import { reducedMotion } from './MotionPreference.ts';
 import { TileColor } from '../core/TileTypes.ts';
 
 export interface IVFXManager {
   createParticleBurst(x: number, y: number, color: TileColor, count?: number): void;
-  createLaserBeam(x: number, y: number, length: number, isHorizontal: boolean): void;
+  createLaserBeam(x: number, y: number, length: number, isHorizontal: boolean): void | Promise<void>;
+  createColorBombCharge?(x: number, y: number, targets: { x: number; y: number }[]): Promise<void>;
   createShockwave(x: number, y: number, radius: number): void;
   createFloatingText(x: number, y: number, message: string, color?: number): void;
   screenShake(target: Container, intensity?: number): void;
@@ -74,7 +76,7 @@ export class VFXManager implements IVFXManager {
     }
   }
 
-  public createLaserBeam(x: number, y: number, length: number, isHorizontal: boolean): void {
+  public createLaserBeam(x: number, y: number, length: number, isHorizontal: boolean): Promise<void> {
     const beam = new Graphics();
     if (isHorizontal) {
       beam.rect(-length / 2, -6, length, 12);
@@ -86,14 +88,43 @@ export class VFXManager implements IVFXManager {
     beam.y = y;
     this.container.addChild(beam);
 
-    gsap.timeline({
+    return new Promise(resolve => gsap.timeline({
       onComplete: () => {
         this.container.removeChild(beam);
         beam.destroy();
+        resolve();
       },
     })
       .fromTo(beam.scale, { x: 0.1, y: 0.1 }, { x: 1, y: 1.5, duration: 0.15, ease: 'power2.out' })
-      .to(beam, { alpha: 0, duration: 0.2, ease: 'power2.in' });
+      .to(beam, { alpha: 0, duration: 0.2, ease: 'power2.in' }));
+  }
+
+  public createColorBombCharge(x: number, y: number, targets: { x: number; y: number }[]): Promise<void> {
+    const still = reducedMotion();
+    const ring = new Graphics().circle(0, 0, 18).stroke({ width: 3, color: 0x64e9ff });
+    ring.position.set(x, y);
+    this.container.addChild(ring);
+    const sparks: Graphics[] = [];
+    return new Promise(resolve => {
+      const timeline = gsap.timeline({ onComplete: () => {
+        ring.destroy();
+        sparks.forEach(spark => spark.destroy());
+        resolve();
+      } });
+      timeline.to(ring.scale, { x: still ? 1 : 1.8, y: still ? 1 : 1.8, duration: still ? 0.08 : 0.28 });
+      if (!still) targets.forEach((target, index) => {
+        const spark = new Graphics().circle(0, 0, 4).fill(0xffe082);
+        spark.position.set(x, y);
+        spark.alpha = 0;
+        this.container.addChild(spark);
+        sparks.push(spark);
+        const start = 0.28 + Math.min(index * 0.012, 0.24);
+        timeline.set(spark, { alpha: 1 }, start)
+          .to(spark, { x: target.x, y: target.y, duration: 0.28, ease: 'power2.inOut' }, start)
+          .to(spark, { alpha: 0, duration: 0.06 }, start + 0.28);
+      });
+      timeline.to(ring, { alpha: 0, duration: still ? 0.05 : 0.12 });
+    });
   }
 
   public createShockwave(x: number, y: number, radius: number): void {
@@ -150,6 +181,7 @@ export class VFXManager implements IVFXManager {
   }
 
   public screenShake(target: Container, intensity = 8): void {
+    if (reducedMotion()) return;
     const originalX = target.x;
     const originalY = target.y;
 

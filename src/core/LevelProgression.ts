@@ -46,22 +46,22 @@ export const DIFFICULTY_CYCLE: readonly LevelDifficulty[] = [
 
 export const DEFAULT_DIFFICULTY_PRESETS: Record<LevelDifficulty, DifficultyPreset> = {
   [LevelDifficulty.Easy]: {
-    baseMoves: 26,
+    baseMoves: 22,
     targetMultiplier: 1.0,
     shuffles: 4,
   },
   [LevelDifficulty.Medium]: {
-    baseMoves: 22,
+    baseMoves: 18,
     targetMultiplier: 1.6,
     shuffles: 3,
   },
   [LevelDifficulty.Hard]: {
-    baseMoves: 18,
+    baseMoves: 15,
     targetMultiplier: 2.3,
     shuffles: 2,
   },
   [LevelDifficulty.VeryHard]: {
-    baseMoves: 15,
+    baseMoves: 12,
     targetMultiplier: 3.2,
     shuffles: 1,
   },

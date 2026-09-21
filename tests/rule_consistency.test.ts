@@ -161,13 +161,14 @@ describe('rock immunity and one-shot special effects', () => {
       }
     });
 
-  it('does not fire combo participants again when a secondary blast hits them', () => {
+  it('does not fire a third special hit by a combo cross', () => {
     const board = coloredBoard([[2, 2], [2, 3], [2, 4]]);
     board.get(2, 2)!.special = SpecialType.StripedHorizontal;
     board.get(2, 3)!.special = SpecialType.StripedVertical;
     board.get(2, 4)!.special = SpecialType.StripedHorizontal;
     const result = new SpecialResolver().resolveSpecialSwapCombo(board, { row: 2, col: 2 }, { row: 2, col: 3 });
-    expect(result.effects.map(effect => effect.effectType)).toEqual(['combo_cross', SpecialType.StripedHorizontal]);
+    expect(result.effects.map(effect => effect.effectType)).toEqual(['combo_cross']);
+    expect(result.destroyedTileIds.has(board.get(2, 4)!.id)).toBe(false);
   });
 
   it.each(specials)('direct %s blasts never destroy or target rocks', special => {

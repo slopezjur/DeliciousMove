@@ -60,8 +60,10 @@ export interface DropMovement {
 
 export interface SpawnData {
   tile: TileData;
-  /** Internal refill sources must not fly through occupied cells or gaps. */
+  /** Growth (e.g. chocolate) appears in place rather than falling. */
   appearInPlace?: boolean;
+  /** Top of a gravity segment below a gap or fixed obstacle. */
+  segmentTop?: number;
 }
 
 export interface SpecialEvolution {

@@ -144,10 +144,12 @@ export class TurnCoordinator implements ITurnCoordinator {
 
   /**
    * Rescues a jammed board while the level still has reshuffles. Once the budget is
-   * spent — or the scrambler cannot find a solvable arrangement — the run is over.
-   * In bonus phase (target already reached), reaching 0 moves concludes the level with Victory!
+   * spent, the attempt fails. Failed rescues try the remaining shuffle budget.
+   * In bonus phase, a board with no legal action concludes the level with victory.
    */
   private async settleDeadlocks(): Promise<void> {
+    // Exhausted move budgets fail immediately; unused shuffles cannot buy moves.
+    if (!this.session.isTargetReached() && this.session.getMovesLeft() === 0) return;
     if (this.deadlockResolver.hasPossibleMoves(this.board)) return;
 
     if (this.session.isTargetReached()) {
@@ -155,17 +157,12 @@ export class TurnCoordinator implements ITurnCoordinator {
       return;
     }
 
-    if (!this.session.consumeShuffle()) {
-      this.session.endWithDeadlock();
-      return;
+    while (this.session.consumeShuffle()) {
+      const { success, mapping } = this.deadlockResolver.shuffleBoard(this.board);
+      await this.animations.animateShuffle(mapping);
+      this.telemetry?.recordShuffle('deadlock_auto', success);
+      if (success) return;
     }
-
-    const { success, mapping } = this.deadlockResolver.shuffleBoard(this.board);
-    await this.animations.animateShuffle(mapping);
-    this.telemetry?.recordShuffle('deadlock_auto', success);
-
-    if (!success) {
-      this.session.endWithDeadlock();
-    }
+    this.session.endWithDeadlock();
   }
 }

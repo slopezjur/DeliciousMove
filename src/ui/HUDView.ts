@@ -17,8 +17,6 @@ export class HUDView implements IHUDView {
   private levelEl: HTMLElement | null;
   private shufflesEl: HTMLElement | null;
   private difficultyBadgeEl: HTMLElement | null;
-  private movesBonusBadgeEl: HTMLElement | null;
-  private movesFrozenBadgeEl: HTMLElement | null;
   private bonusPhaseBadgeEl: HTMLElement | null;
   private progressFill: HTMLElement | null;
   private soundBtn: HTMLElement | null;
@@ -46,11 +44,12 @@ export class HUDView implements IHUDView {
     this.levelEl = this.findElement('level-value');
     this.shufflesEl = this.findElement('shuffles-value');
     this.difficultyBadgeEl = this.findElement('difficulty-badge');
-    this.movesBonusBadgeEl = this.findElement('moves-bonus-badge');
-    this.movesFrozenBadgeEl = this.findElement('moves-frozen-badge');
     this.bonusPhaseBadgeEl = this.findElement('bonus-phase-indicator');
     this.progressFill = this.findElement('progress-fill');
     this.soundBtn = this.findElement('sound-toggle-btn');
+    const bonusDialog = this.findElement('bonus-info-dialog') as HTMLDialogElement | null;
+    this.bonusPhaseBadgeEl?.addEventListener('click', () => bonusDialog?.showModal());
+    this.findElement('bonus-info-close')?.addEventListener('click', () => bonusDialog?.close());
 
     if (this.soundBtn) {
       this.soundBtn.addEventListener('click', () => {
@@ -81,37 +80,25 @@ export class HUDView implements IHUDView {
     if (this.bonusPhaseBadgeEl) {
       this.bonusPhaseBadgeEl.classList.add('hidden');
     }
-    if (this.movesFrozenBadgeEl) {
-      this.movesFrozenBadgeEl.classList.add('hidden');
-    }
 
     if (this.difficultyBadgeEl && config.difficulty) {
       this.difficultyBadgeEl.textContent = this.language.t(config.difficulty);
       this.difficultyBadgeEl.className = `difficulty-badge difficulty-${config.difficulty}`;
     }
 
-    if (this.movesBonusBadgeEl) {
-      if (bonusMoves > 0) {
-        this.movesBonusBadgeEl.textContent = `+${bonusMoves}`;
-        this.movesBonusBadgeEl.classList.remove('hidden');
-      } else {
-        this.movesBonusBadgeEl.classList.add('hidden');
-      }
-    }
-
-    this.updateMoves(config.moves + bonusMoves, false);
+    this.updateMoves(config.moves + bonusMoves, false, config.moves, bonusMoves);
     this.showBonus(false);
     this.updateShuffles(config.shuffles);
   }
 
-  public updateMoves(moves: number, isFrozen = false): void {
-    this.setText(this.movesEl, moves.toString());
+  public updateMoves(moves: number, isFrozen = false, levelMoves = moves, bankMoves = 0): void {
+    this.setText(this.movesEl, levelMoves.toString());
+    this.setText(this.findElement('bank-moves-value'), bankMoves.toString());
+    this.findElement('bank-moves')?.classList.toggle('bank-active', levelMoves === 0 && bankMoves > 0 && !isFrozen);
     if (isFrozen) {
-      this.movesFrozenBadgeEl?.classList.remove('hidden');
       this.movesEl?.classList.remove('low-moves');
       this.movesEl?.classList.add('frozen-moves');
     } else {
-      this.movesFrozenBadgeEl?.classList.add('hidden');
       this.movesEl?.classList.remove('frozen-moves');
       this.movesEl?.classList.toggle('low-moves', moves <= LOW_MOVES_THRESHOLD);
     }
@@ -130,13 +117,9 @@ export class HUDView implements IHUDView {
   private showBonus(active: boolean): void {
     this.bonusActive = active;
     this.bonusPhaseBadgeEl?.classList.toggle('hidden', !active);
-    const hint = this.findElement('level-feature-hint');
-    hint?.classList.toggle('hidden', active || !hint.textContent);
-    const instruction = this.findElement('objectives-instruction');
-    instruction?.classList.toggle('hidden', active || !this.objectivesView.hasVariedObjectives());
+    this.progressFill?.classList.toggle('bonus-phase-glow', active);
     if (active) {
       this.bonusPhaseBadgeEl?.classList.remove('hidden');
-      this.movesFrozenBadgeEl?.classList.remove('hidden');
       this.movesEl?.classList.remove('low-moves');
       this.movesEl?.classList.add('frozen-moves');
       this.progressFill?.classList.add('bonus-phase-glow');

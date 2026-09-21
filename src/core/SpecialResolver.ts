@@ -77,8 +77,8 @@ export class SpecialResolver implements ISpecialResolver {
   }
 
   /**
-   * Explodes special candies caught inside matches or cascading explosions using Strategy
-   * handlers, chaining blast-uncovered specials breadth-first. A single shared queue across
+   * Explodes explicitly matched/activated specials using Strategy handlers,
+   * chaining direct airplane hits breadth-first. A single shared queue across
    * all batches guarantees every special detonates exactly once.
    */
   public detonate(
@@ -123,7 +123,7 @@ export class SpecialResolver implements ISpecialResolver {
         })
       );
 
-      // Specials uncovered by this blast detonate without inheriting a trigger color.
+      // Direct airplane targets detonate without inheriting a trigger color.
       for (const uncovered of chained) {
         queue.push({ tile: uncovered });
       }

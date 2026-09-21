@@ -102,7 +102,9 @@ describe('terrain, objects and matching', () => {
     const spawns = new TileSpawner().refillEmptySlots(board);
     expect(board.get(2, 1)).toBeNull();
     expect(board.getSnapshot().tiles).toHaveLength(17);
-    expect(spawns.every(s => s.appearInPlace)).toBe(true);
+    expect(spawns.every(s => !s.appearInPlace)).toBe(true);
+    expect(spawns.filter(s => s.tile.col === 1 && s.tile.row > 2).every(s => s.segmentTop === 3)).toBe(true);
+    expect(spawns.filter(s => s.tile.col !== 1).every(s => s.segmentTop === undefined)).toBe(true);
     expect(board.clone().getSnapshot()).toEqual(board.getSnapshot());
     const restored = new Board(6, 3); restored.restore(board.getSnapshot());
     expect(restored.getSnapshot()).toEqual(board.getSnapshot());

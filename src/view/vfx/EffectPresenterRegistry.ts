@@ -9,14 +9,16 @@ export class StripedBeamPresenter implements IEffectPresenter {
     );
   }
 
-  public present(effect: SpecialTriggerEffect, ctx: EffectPresentationContext): void {
+  public async present(effect: SpecialTriggerEffect, ctx: EffectPresentationContext): Promise<void> {
     const isHorizontal = effect.effectType === SpecialType.StripedHorizontal;
     const length = isHorizontal
       ? ctx.boardView.boardPixelWidth
       : ctx.boardView.boardPixelHeight;
 
-    ctx.boardView.vfx.createLaserBeam(ctx.position.x, ctx.position.y, length, isHorizontal);
     ctx.sound.playSpecialLaser();
+    await ctx.boardView.vfx.createLaserBeam(
+      isHorizontal ? ctx.boardView.boardPixelWidth / 2 : ctx.position.x,
+      isHorizontal ? ctx.position.y : ctx.boardView.boardPixelHeight / 2, length, isHorizontal);
   }
 }
 
@@ -37,26 +39,28 @@ export class CrossBeamPresenter implements IEffectPresenter {
     return effectType === 'combo_cross' || effectType === 'combo_giant_cross';
   }
 
-  public present(effect: SpecialTriggerEffect, ctx: EffectPresentationContext): void {
+  public async present(effect: SpecialTriggerEffect, ctx: EffectPresentationContext): Promise<void> {
     const isGiant = effect.effectType === 'combo_giant_cross';
     const offsets = isGiant ? [-ctx.boardView.tileSize, 0, ctx.boardView.tileSize] : [0];
+    const beams: (void | Promise<void>)[] = [];
 
     for (const offset of offsets) {
-      ctx.boardView.vfx.createLaserBeam(
-        ctx.position.x,
+      beams.push(ctx.boardView.vfx.createLaserBeam(
+        ctx.boardView.boardPixelWidth / 2,
         ctx.position.y + offset,
         ctx.boardView.boardPixelWidth,
         true
-      );
-      ctx.boardView.vfx.createLaserBeam(
+      ));
+      beams.push(ctx.boardView.vfx.createLaserBeam(
         ctx.position.x + offset,
-        ctx.position.y,
+        ctx.boardView.boardPixelHeight / 2,
         ctx.boardView.boardPixelHeight,
         false
-      );
+      ));
     }
     ctx.boardView.screenShake(isGiant ? 14 : 10);
     ctx.sound.playBombExplosion();
+    await Promise.all(beams);
   }
 }
 
@@ -65,11 +69,17 @@ export class ColorBombPresenter implements IEffectPresenter {
     return (
       effectType === SpecialType.ColorBomb ||
       effectType === 'combo_color_bomb_striped' ||
+      effectType === 'combo_color_bomb_airplane' ||
       effectType === 'combo_double_color_bomb'
     );
   }
 
-  public present(effect: SpecialTriggerEffect, ctx: EffectPresentationContext): void {
+  public async present(effect: SpecialTriggerEffect, ctx: EffectPresentationContext): Promise<void> {
+    const targets = effect.affectedTileIds.flatMap(id => {
+      const sprite = ctx.boardView.getTileSprite(id);
+      return sprite ? [{ x: sprite.x, y: sprite.y }] : [];
+    });
+    await ctx.boardView.vfx.createColorBombCharge?.(ctx.position.x, ctx.position.y, targets);
     const intensity = effect.effectType === 'combo_double_color_bomb' ? 18 : 12;
     ctx.boardView.screenShake(intensity);
     ctx.boardView.vfx.createShockwave(

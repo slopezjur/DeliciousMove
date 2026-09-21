@@ -42,16 +42,16 @@ describe('Alternating infinite level progression', () => {
     const hard = progression.getConfig(3);
     const veryHard = progression.getConfig(4);
 
-    expect(easy.moves).toBe(26);
+    expect(easy.moves).toBe(22);
     expect(easy.shuffles).toBe(4);
 
-    expect(medium.moves).toBe(22);
+    expect(medium.moves).toBe(18);
     expect(medium.shuffles).toBe(3);
 
-    expect(hard.moves).toBe(18);
+    expect(hard.moves).toBe(15);
     expect(hard.shuffles).toBe(2);
 
-    expect(veryHard.moves).toBe(15);
+    expect(veryHard.moves).toBe(12);
     expect(veryHard.shuffles).toBe(1);
   });
 

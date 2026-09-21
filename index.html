@@ -15,16 +15,14 @@
             <span id="level-value" class="hud-value">1</span>
             <span id="difficulty-badge" class="difficulty-badge difficulty-easy">EASY</span>
           </div>
+          <div class="bonus-slot" role="status" aria-live="polite"><button id="bonus-phase-indicator" class="bonus-info-button hidden" aria-haspopup="dialog" aria-controls="bonus-info-dialog" data-i18n-aria-label="bonus" data-i18n-title="bonus"><span data-i18n="bonusShort">Bonus</span> ⓘ</button></div>
           <button id="settings-toggle-btn" class="icon-button" aria-haspopup="dialog" aria-controls="settings-dialog" data-i18n-aria-label="settings" data-i18n-title="settings">⚙</button>
         </div>
         <section class="gameplay-stats">
           <div class="hud-card" id="moves-card" data-i18n-title="movesTip">
-            <span class="hud-label" data-i18n="moves">Moves</span>
+            <span class="hud-label" data-i18n="levelMoves">Level moves</span>
             <span id="moves-value" class="hud-value">25</span>
-            <div class="moves-badges">
-              <span id="moves-bonus-badge" class="moves-bonus-badge hidden">+0</span>
-              <span data-i18n="frozen" id="moves-frozen-badge" class="moves-frozen-badge hidden">❄️ FROZEN</span>
-            </div>
+            <div id="bank-moves" class="bank-moves"><span data-i18n="bankMoves">Bank</span> <strong id="bank-moves-value">0</strong></div>
           </div>
           <div class="progress-container">
             <div class="progress-header">
@@ -41,13 +39,11 @@
           </div>
           <p id="objectives-instruction" class="feature-hint hidden" data-i18n="allRequired"></p>
           <div id="objectives-list" class="objective-list hidden" role="status" aria-live="polite" aria-atomic="true"></div>
-          <aside id="bonus-phase-indicator" class="bonus-round-banner hidden" role="status" aria-live="polite">
-            <strong data-i18n="bonus">BONUS ROUND</strong>
-            <p data-i18n="bonusExplanation"></p>
-          </aside>
           <p id="level-feature-hint" class="feature-hint hidden"></p>
         </section>
         <footer class="run-summary">
+          <div class="lives-row"><span class="hud-label" data-i18n="lives">Lives</span><strong id="lives-value">♥ 5/5</strong><span id="lives-timer"></span></div>
+          <p id="resources-warning" class="records-warning hidden" role="status"></p>
           <div class="secondary-stats">
             <div class="summary-stat" id="global-score-card" data-i18n-title="globalTip">
               <span class="hud-label" data-i18n="globalScore">Global Score</span>
@@ -67,6 +63,10 @@
         </footer>
       </header>
       <div id="board-viewport"></div>
+      <dialog id="bonus-info-dialog" aria-labelledby="bonus-info-title">
+        <div class="settings-heading"><h2 id="bonus-info-title" data-i18n="bonus">BONUS ROUND</h2><button id="bonus-info-close" class="icon-button" data-i18n-aria-label="close">✕</button></div>
+        <p data-i18n="bonusExplanation"></p>
+      </dialog>
       <dialog id="settings-dialog" aria-labelledby="settings-title">
         <div class="settings-heading">
           <h2 id="settings-title" data-i18n="settings">Settings</h2>

@@ -34,6 +34,18 @@ function fixture(): GameSave {
 }
 
 describe('versioned saves', () => {
+  it.each([[30, 17, 13, 17], [10, 17, 0, 10], [0, 17, 0, 0]])(
+    'migrates legacy total %i and initial bank %i without adding moves', (total, bank, baseLeft, bankLeft) => {
+      const legacy = fixture(); legacy.schemaVersion = 2; legacy.rulesVersion = 3;
+      delete legacy.session.levelMovesLeft;
+      legacy.session.movesLeft = total; legacy.session.accumulatedMoves = bank;
+      if (!total) { legacy.session.state = GameState.GameOver; legacy.session.reason = GameOverReason.OutOfMoves; }
+      const migrated = new SaveCodec().decode(JSON.stringify(legacy));
+      expect(migrated.session).toMatchObject({ movesLeft: total, levelMovesLeft: baseLeft, accumulatedMoves: bankLeft });
+      expect(migrated.board).toEqual(legacy.board);
+      expect(migrated.session.config).toEqual(legacy.session.config);
+      expect(migrated.random).toEqual(legacy.random);
+    });
   it('round-trips the board, IDs, session and the exact random sequence without aliasing', () => {
     const original = fixture(), codec = new SaveCodec();
     const saved = codec.decode(codec.encode(original));
@@ -63,6 +75,8 @@ describe('versioned saves', () => {
         saved.session.globalScore = saved.session.score;
       } else {
         saved.session.movesLeft = 0;
+        saved.session.levelMovesLeft = 0;
+        saved.session.accumulatedMoves = 0;
         saved.session.reason = GameOverReason.OutOfMoves;
       }
       const session = new GameSession();
@@ -157,6 +171,7 @@ describe('local save protection', () => {
     const storage = new MemoryStorage(), store = new SaveStore(storage);
     const first = completedFixture(), second = completedFixture();
     second.session.movesLeft--;
+    second.session.levelMovesLeft!--;
     expect(store.load()).toBeNull();
     expect(store.save(first)).toBe(true);
     expect(store.save(second)).toBe(true);

@@ -34,8 +34,9 @@ export class TileSpawner implements ITileSpawner {
       for (let row = board.rows - 1; row >= 0; row--) {
         if (!board.isValidPosition(row, col) || board.get(row, col) !== null) continue;
         const { color, special } = wave.nextTile(board, row, col);
-        const internalSource = board.hasTerrain() || Array.from({ length: row }, (_, r) => r).some(r => board.isGravityBarrier(r, col));
-        spawns.push({ tile: board.createTile(row, col, color, special), ...(internalSource ? { appearInPlace: true } : {}) });
+        let segmentTop = row;
+        while (segmentTop > 0 && !board.isGravityBarrier(segmentTop - 1, col)) segmentTop--;
+        spawns.push({ tile: board.createTile(row, col, color, special), ...(segmentTop > 0 ? { segmentTop } : {}) });
       }
     }
     return spawns;

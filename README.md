@@ -116,15 +116,23 @@ Swapping specials combines their effects:
 - Striped + striped: a row-and-column cross.
 - Striped + wrapped: three rows and three columns.
 - Wrapped + wrapped: a 5×5 area.
-- Color bomb + normal: all candies of that color.
-- Color bomb + striped: converts that color into stripes and triggers them.
-- Color bomb + color bomb: clears breakable tiles across the board.
+- Color bomb + normal: ordinary candies of that color.
+- Color bomb + striped: converts ordinary candies of that color into stripes and triggers them.
+- Color bomb + color bomb: clears ordinary candies and hits blockers across the board.
 - Airplane + airplane: three airplane targets.
 - Airplane + striped: a cross at the flight target.
 - Airplane + wrapped: a 3×3 blast at the flight target.
-- Color bomb + airplane: converts that color into airplanes and launches them.
+- Color bomb + airplane: converts ordinary candies of that color into airplanes and launches them.
 
 Rocks remain immune to these effects.
+Other existing specials survive incidental row, column, area, and color blasts.
+Only a direct airplane landing can activate an incidental special; its takeoff and
+landing-area neighbors remain protected. Specials explicitly activated, swapped,
+or caught in a color match still fire. Conversion combos never overwrite existing
+specials. Gravity can subsequently move a surviving special into a new color match.
+Laser playback finishes before removal and falling. Color bombs charge and send
+sparks to their targets before staggered clears; reduced-motion mode omits sparks,
+staggering, and screen shake.
 Color-bomb conversions also leave rocks unchanged. Rocks' stored placeholder color
 does not count toward color-bomb target selection or bonus-refill color matching.
 Combo participants do not fire their original effects again when hit by a later
@@ -135,10 +143,10 @@ chain, except partners explicitly detonated by a conversion combo.
 Move/shuffle budgets repeat a four-tier difficulty cycle. Every newly generated level
 requires its minimum score **and all additional board objectives**:
 
-1. Easy: 26 base moves, 3,500 initial target, four rescue shuffles.
-2. Medium: 22 base moves, 5,600 initial target, three rescue shuffles.
-3. Hard: 18 base moves, 8,050 initial target, two rescue shuffles.
-4. Very Hard: 15 base moves, 11,200 initial target, one rescue shuffle.
+1. Easy: 22 base moves, 3,500 initial target, four rescue shuffles.
+2. Medium: 18 base moves, 5,600 initial target, three rescue shuffles.
+3. Hard: 15 base moves, 8,050 initial target, two rescue shuffles.
+4. Very Hard: 12 base moves, 11,200 initial target, one rescue shuffle.
 
 Each subsequent four-level cycle multiplies targets by 1.25, rounded to the nearest 50.
 Configuration lives in `DEFAULT_ALTERNATING_TUNING` and `DEFAULT_DIFFICULTY_PRESETS`
@@ -150,17 +158,27 @@ avoid new matches and gradually introduce rocks: a 35% roll for an eligible empt
 at most two rocks per refill wave and at most one newly spawned rock per column per wave.
 Bonus refills avoid both lines and squares when an allowed color is available,
 including squares containing existing specials.
-The persistent **Bonus round** banner explains the frozen moves, extra scoring, and
-why play continues. It disappears when the next level starts.
+The compact **Bonus / Extra ⓘ** button occupies a reserved heading slot. Tap it for
+the explanation of frozen moves and extra scoring. Entering bonus never inserts a
+description above the board or removes the goal hints, so the board stays in place.
 
 When no legal swap or direct special activation remains during bonus play, the level
 ends in victory. The next level receives its base moves plus all unused moves from
 the previous level. Level score resets; global score continues accumulating.
-Restarting after a loss resets the run, global score, and carried moves.
+The HUD separates **Level moves** from **Bank**. Level moves are spent first, then
+the bank is highlighted and spent. Neither budget is spent during bonus play.
 
-Before completing all objectives, the run ends if the move budget expires or a deadlock cannot
-be rescued. A deadlock spends one rescue shuffle; exhausted rescues or a failed shuffle
-end the run. Each level grants at least one rescue. Opening-board reshuffling is free.
+Before completing all objectives, exhausting **both** move budgets loses one life
+even if shuffles remain. A deadlock instead uses rescue shuffles first, retrying
+failed rescues until one succeeds or all are exhausted; only then is a life lost.
+Each level grants at least one rescue. Opening-board reshuffling is free.
+
+Players start with five lives. One regenerates every 30 minutes, including offline,
+up to five. The next-life countdown is shown beside the life counter. At zero lives,
+play is blocked until regeneration; the run and records are not reset. **Retry level**
+does not charge again: it restarts the same level with fresh base moves, goals, board,
+and shuffles, retaining only unspent banked moves. Failed-attempt points are discarded.
+Only explicit **New Game** resets the run, score, and bank; it never refills lives.
 
 Deadlock frequency depends on board rules, player choices, and the current phase.
 Earlier measurements from older rules are not estimates for the current game.
@@ -188,7 +206,9 @@ counts remain bounded; difficulty budgets and banked moves still apply.
   pass, regardless of how many simultaneous hits occur. Removal opens their cell.
 - **Shapes:** holes are not empty cells. Matches cannot bridge them; gravity stops
   at gaps, ice, and fixed blockers. Each vertical segment refills independently.
-  Internal refills fade in locally rather than crossing occupied cells or holes.
+  Refills fall within each segment. Internal sources release tiles bottom-first at
+  one-cell intervals, without crossing blockers or holes. Jelly and exits do not
+  disable falling. Chocolate growth alone appears in place.
 - **Cherries:** movable, non-matching ingredients cannot activate or be destroyed or
   converted by specials. Swaps still need a candy match or a special activation.
   Gravity carries cherries to green arrow exits at the bottom of playable segments;
@@ -210,9 +230,13 @@ The practice entry point is excluded from production builds. Reload resets pract
 ## Saved progress
 
 Progress is saved locally **only when a level is completed**, after bonus play and
-animations finish. Reloading restores the last victory screen; **Next Level** continues
-with banked moves and global score. Unfinished-level moves are not saved. Before the
-first completed level, refreshing starts a new run.
+animations finish. A separate consumables ledger preserves lives, the regeneration
+deadline, spent banked moves, and failed-attempt status immediately. It never stores
+mid-level board state or objective progress. Reload restores the last victory screen
+if the next level has not started; otherwise that next level restarts with fresh base
+moves/shuffles and only the remaining bank. A failed attempt still requires **Retry
+level**, without another life debit. Before the first victory, level 1 restarts with
+the same life state. Failed/unfinished scores never inflate the completed-level score.
 
 Saves include schema/rules versions, validation, sequential migration hooks, and a
 previous-checkpoint backup. Corrupt or unsupported saves are preserved instead of
@@ -231,6 +255,8 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
 - `TileSpawner`: fills empty cells. `IRefillPolicy.beginWave()` supplies tile selection
   with wave-local state; `RandomRefillPolicy` and `BonusRefillPolicy` own phase rules.
 - `SpecialResolver`: executes handlers registered in `SpecialRegistry`.
+- `PlayerResources`: versioned life regeneration and attempt-consumable ledger, with an injectable clock.
+- `SpawnMotion`: pure segment-aware refill timing, independent of Pixi/GSAP.
   `registerComboHandler(handler, priority)` accepts explicit precedence: lower numbers
   run first; equal priorities retain registration order. Custom handlers default to 0,
   and the generic color-bomb fallback runs at 1000. Use a negative priority to override

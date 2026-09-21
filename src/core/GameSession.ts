@@ -21,6 +21,7 @@ export enum GameOverReason {
 
 /** Immutable view of the session handed to listeners on every state transition. */
 export interface SessionSnapshot {
+  levelMovesLeft?: number;
   objectives?: ObjectiveProgress[];
   level: number;
   score: number;
@@ -45,6 +46,7 @@ export interface GameSessionListener {
 }
 
 export interface SessionSaveState {
+  levelMovesLeft?: number;
   objectiveProgress?: number[];
   config: LevelConfig;
   score: number;
@@ -57,6 +59,9 @@ export interface SessionSaveState {
 }
 
 export interface IGameSession {
+  getLevelMovesLeft(): number;
+  retryLevel(): void;
+  failAttempt(reason: GameOverReason): GameState;
   recordObjectiveEvents?(events: readonly ObjectiveEvent[]): void;
   getObjectives?(): ObjectiveProgress[];
   exportState(): SessionSaveState;
@@ -95,6 +100,7 @@ export class GameSession implements IGameSession {
   private currentScore: number = 0;
   private globalScore: number = 0;
   private movesLeft: number;
+  private levelMovesLeft: number;
   private shufflesLeft: number;
   private accumulatedMoves: number = 0;
   private state: GameState = GameState.Ready;
@@ -106,6 +112,7 @@ export class GameSession implements IGameSession {
     this.config = this.progression.getConfig(startLevel);
     this.objectives = this.createObjectives();
     this.movesLeft = this.config.moves;
+    this.levelMovesLeft = this.config.moves;
     this.shufflesLeft = this.config.shuffles;
   }
 
@@ -114,6 +121,7 @@ export class GameSession implements IGameSession {
     return {
       objectiveProgress: this.getObjectives().map(p => p.current),
       config: { ...this.config }, score: this.currentScore, globalScore: this.globalScore,
+      levelMovesLeft: this.levelMovesLeft,
       movesLeft: this.movesLeft, shufflesLeft: this.shufflesLeft,
       accumulatedMoves: this.accumulatedMoves, state: this.state, reason: this.gameOverReason,
     };
@@ -128,6 +136,7 @@ export class GameSession implements IGameSession {
     this.movesLeft = saved.movesLeft;
     this.shufflesLeft = saved.shufflesLeft;
     this.accumulatedMoves = saved.accumulatedMoves;
+    this.levelMovesLeft = saved.levelMovesLeft ?? Math.max(0, saved.movesLeft - saved.accumulatedMoves);
     this.state = saved.state;
     this.gameOverReason = saved.reason;
   }
@@ -158,6 +167,7 @@ export class GameSession implements IGameSession {
     this.currentScore = 0;
     this.accumulatedMoves = carriedMoves;
     this.movesLeft = this.config.moves + carriedMoves;
+    this.levelMovesLeft = this.config.moves;
     this.shufflesLeft = this.config.shuffles;
     this.gameOverReason = undefined;
     this.setState(GameState.Ready);
@@ -211,6 +221,22 @@ export class GameSession implements IGameSession {
     return this.accumulatedMoves;
   }
 
+  public getLevelMovesLeft(): number { return this.levelMovesLeft; }
+
+  /** Failed-attempt points never inflate the run score; spent bank moves stay spent. */
+  public retryLevel(): void {
+    if (this.state !== GameState.GameOver) return;
+    this.globalScore -= this.currentScore;
+    this.startLevel(this.config.level, this.accumulatedMoves);
+  }
+
+  public failAttempt(reason: GameOverReason): GameState {
+    if (this.state === GameState.GameOver || this.state === GameState.Victory) return this.state;
+    this.gameOverReason = reason;
+    this.setState(GameState.GameOver);
+    return this.state;
+  }
+
   public getTargetScore(): number {
     return this.config.targetScore;
   }
@@ -246,6 +272,7 @@ export class GameSession implements IGameSession {
       movesLeft: this.movesLeft,
       shufflesLeft: this.shufflesLeft,
       accumulatedMoves: this.accumulatedMoves,
+      levelMovesLeft: this.levelMovesLeft,
       difficulty: this.config.difficulty,
       reason: this.gameOverReason,
       globalScore: this.globalScore,
@@ -263,6 +290,8 @@ export class GameSession implements IGameSession {
     // Moves are frozen once the minimum target is achieved so surplus moves are banked for next levels
     if (!this.isTargetReached()) {
       this.movesLeft--;
+      if (this.levelMovesLeft > 0) this.levelMovesLeft--;
+      else this.accumulatedMoves--;
       this.notifyMoves();
     }
     this.setState(GameState.Resolving);
@@ -287,7 +316,7 @@ export class GameSession implements IGameSession {
     return true;
   }
 
-  /** Ends the run because the board has no valid moves and no rescue left. */
+  /** Ends the attempt because the board has no valid moves and no rescue left. */
   public endWithDeadlock(): GameState {
     this.gameOverReason = GameOverReason.Deadlock;
     this.setState(GameState.GameOver);

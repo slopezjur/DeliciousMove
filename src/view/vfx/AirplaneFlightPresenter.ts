@@ -8,8 +8,7 @@ export class AirplaneFlightPresenter implements IEffectPresenter {
       effectType === SpecialType.Airplane ||
       effectType === 'combo_airplane_airplane' ||
       effectType === 'combo_airplane_striped' ||
-      effectType === 'combo_airplane_wrapped' ||
-      effectType === 'combo_color_bomb_airplane'
+      effectType === 'combo_airplane_wrapped'
     );
   }
 
@@ -44,6 +43,7 @@ export class AirplaneFlightPresenter implements IEffectPresenter {
     if (effect.secondaryTargets) targets.push(...effect.secondaryTargets);
 
     const flights: Promise<void>[] = [];
+    const impacts: Promise<void>[] = [];
     for (const target of targets) {
       const targetPos = ctx.boardView.gridToLocal(target.row, target.col);
       flights.push(
@@ -52,23 +52,26 @@ export class AirplaneFlightPresenter implements IEffectPresenter {
           ctx.position.y,
           targetPos.x,
           targetPos.y,
-          () => this.triggerImpact(effect.effectType, targetPos, ctx)
+          () => { impacts.push(this.triggerImpact(effect.effectType, targetPos, ctx)); }
         )
       );
     }
 
     await Promise.all(flights);
+    await Promise.all(impacts);
   }
 
-  private triggerImpact(
+  private async triggerImpact(
     effectType: ComboEffectType,
     target: { x: number; y: number },
     ctx: EffectPresentationContext
-  ): void {
+  ): Promise<void> {
     if (effectType === 'combo_airplane_striped') {
-      ctx.boardView.vfx.createLaserBeam(target.x, target.y, ctx.boardView.boardPixelWidth, true);
-      ctx.boardView.vfx.createLaserBeam(target.x, target.y, ctx.boardView.boardPixelHeight, false);
       ctx.sound.playSpecialLaser();
+      await Promise.all([
+        ctx.boardView.vfx.createLaserBeam(ctx.boardView.boardPixelWidth / 2, target.y, ctx.boardView.boardPixelWidth, true),
+        ctx.boardView.vfx.createLaserBeam(target.x, ctx.boardView.boardPixelHeight / 2, ctx.boardView.boardPixelHeight, false),
+      ]);
     } else if (effectType === 'combo_airplane_wrapped') {
       ctx.boardView.vfx.createShockwave(target.x, target.y, ctx.boardView.tileSize * 3);
       ctx.boardView.screenShake(10);

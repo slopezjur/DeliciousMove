@@ -4,8 +4,8 @@ import { LevelDifficulty } from '../core/LevelProgression.ts';
 import { RandomSnapshot } from '../core/random/IRandomSource.ts';
 import { SpecialType, TileColor } from '../core/TileTypes.ts';
 
-export const SAVE_SCHEMA_VERSION = 2;
-export const GAME_RULES_VERSION = 3;
+export const SAVE_SCHEMA_VERSION = 3;
+export const GAME_RULES_VERSION = 4;
 
 export interface GameSave {
   schemaVersion: number;
@@ -42,17 +42,23 @@ function requireValue(condition: boolean): void {
 }
 
 /** Legacy checkpoints retain their original score objective until the next level starts. */
-const SCHEMA_MIGRATIONS: MigrationRegistry = new Map([[1, input => {
+const SCHEMA_MIGRATIONS: MigrationRegistry = new Map<number, SaveMigration>([[1, input => {
   const session = record(input.session), config = record(session.config);
   const target = integer(config.targetScore, 1), score = integer(session.score);
   return { ...input, schemaVersion: 2, session: { ...session,
     config: { ...config, objectives: [{ kind: 'score', target }] },
     objectiveProgress: [Math.min(score, target)] } };
+}], [2, input => {
+  const session = record(input.session);
+  const total = integer(session.movesLeft), bank = integer(session.accumulatedMoves);
+  return { ...input, schemaVersion: 3, session: { ...session,
+    levelMovesLeft: Math.max(0, total - bank), accumulatedMoves: Math.min(bank, total) } };
 }]]);
 // Saved levels retain their original requirements; the next level uses current rules.
 const RULES_MIGRATIONS: MigrationRegistry = new Map([
   [1, input => ({ ...input, rulesVersion: 2 })],
   [2, input => ({ ...input, rulesVersion: 3 })],
+  [3, input => ({ ...input, rulesVersion: 4 })],
 ]);
 
 /** Migrations are pure, sequential transforms. Missing upgrade paths preserve the original save. */
@@ -135,8 +141,9 @@ export class SaveCodec {
     requireValue(Object.values(LevelDifficulty).includes(config.difficulty as LevelDifficulty));
     const score = integer(session.score), global = integer(session.globalScore);
     const moves = integer(session.movesLeft), bank = integer(session.accumulatedMoves);
+    const levelMoves = integer(session.levelMovesLeft, 0, Number(config.moves));
     integer(session.shufflesLeft, 0, budget);
-    requireValue(global >= score && moves <= Number(config.moves) + bank);
+    requireValue(global >= score && moves === levelMoves + bank);
     requireValue([GameState.Ready, GameState.Victory, GameState.GameOver].includes(session.state as GameState));
     const objectives = config.objectives ?? [{ kind: 'score', target: config.targetScore }];
     requireValue(Array.isArray(objectives) && objectives.length > 0 && objectives.length <= 3);

@@ -79,7 +79,7 @@ describe('combined goals and bonus state', () => {
 
   it('shows the bonus explanation only after every goal and clears it for the next level', () => {
     const makeElement = () => { const classes = new Set<string>(); return {
-      textContent: '', style: {}, classList: { add: (s: string) => classes.add(s), remove: (s: string) => classes.delete(s),
+      textContent: '', style: {}, addEventListener: vi.fn(), classList: { add: (s: string) => classes.add(s), remove: (s: string) => classes.delete(s),
         toggle: (s: string, force: boolean) => force ? classes.add(s) : classes.delete(s), contains: (s: string) => classes.has(s) } }; };
     const banner = makeElement();
     vi.stubGlobal('document', { getElementById: (id: string) => id === 'bonus-phase-indicator' ? banner : null });

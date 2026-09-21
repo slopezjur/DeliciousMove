@@ -4,6 +4,13 @@ export type Locale = 'en' | 'es';
 export const LANGUAGE_KEY = 'deliciousmove.language';
 
 const en = {
+  bonusShort: 'Bonus',
+  levelMoves: 'Level moves', bankMoves: 'Bank', lives: 'Lives', livesFull: 'Full', nextLife: '+1 in {time}',
+  retryLevel: 'Retry level', continuePlay: 'Continue', noLives: 'No lives left', livesAvailable: 'Lives left: {count}.',
+  retryDetail: 'One life used. Retry level {level} with fresh level moves and shuffles; only unspent banked moves remain.',
+  waitForLife: 'Next life in {time}. Your progress is kept.',
+  resourcesPreserved: 'Unreadable or newer resources preserved; resource saving is paused.',
+  resourcesUnavailable: 'Lives and banked moves cannot be saved in this browser.',
   bestLevel: 'Best level cleared', bestScore: 'Best total score',
   recordsTip: 'Personal records update only after completing a level and survive New Game.',
   recordsUnavailable: 'Records cannot be saved in this browser.',
@@ -27,7 +34,7 @@ const en = {
   level: 'Level', globalScore: 'Global Score', moves: 'Moves', shuffles: 'Shuffles',
   score: 'Score', target: 'Min Target', frozen: '❄️ FROZEN', bonus: 'BONUS ROUND',
   globalTip: 'Total score accumulated across all levels',
-  movesTip: 'Unused moves from cleared levels accumulate here!',
+  movesTip: 'Spend level moves first, then banked moves. In the bonus round neither is spent.',
   shufflesTip: 'Rescue reshuffles left this level', soundTip: 'Toggle sound',
   debugTip: 'Toggle diagnostics (or press `)', languageTip: 'Change language (L)',
   newGame: 'New Game', newGameConfirm: 'Start a new game? Your current run will be replaced.',
@@ -58,6 +65,13 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 const es: Record<MessageKey, string> = {
+  bonusShort: 'Extra',
+  levelMoves: 'Del nivel', bankMoves: 'Reserva', lives: 'Vidas', livesFull: 'Completas', nextLife: '+1 en {time}',
+  retryLevel: 'Reintentar nivel', continuePlay: 'Continuar', noLives: 'Sin vidas', livesAvailable: 'Vidas restantes: {count}.',
+  retryDetail: 'Una vida consumida. Reintenta el nivel {level} con movimientos y mezclas nuevos; solo conservas la reserva no gastada.',
+  waitForLife: 'Próxima vida en {time}. Tu progreso se conserva.',
+  resourcesPreserved: 'Recursos ilegibles o más recientes conservados; su guardado está pausado.',
+  resourcesUnavailable: 'No se pueden guardar las vidas ni la reserva en este navegador.',
   bestLevel: 'Mejor nivel superado', bestScore: 'Mejor puntuación total',
   recordsTip: 'Los récords se actualizan al completar un nivel y se conservan al iniciar una nueva partida.',
   recordsUnavailable: 'No se pueden guardar los récords en este navegador.',
@@ -81,7 +95,7 @@ const es: Record<MessageKey, string> = {
   level: 'Nivel', globalScore: 'Puntuación total', moves: 'Movimientos', shuffles: 'Mezclas',
   score: 'Puntuación', target: 'Objetivo mínimo', frozen: '❄️ CONGELADOS', bonus: 'RONDA EXTRA',
   globalTip: 'Puntuación acumulada en todos los niveles',
-  movesTip: '¡Los movimientos sobrantes de los niveles superados se acumulan aquí!',
+  movesTip: 'Primero gastas los movimientos del nivel y después la reserva. En la ronda extra no gastas ninguno.',
   shufflesTip: 'Mezclas de rescate restantes en este nivel', soundTip: 'Activar o silenciar sonido',
   debugTip: 'Mostrar diagnóstico (o pulsa `)', languageTip: 'Cambiar idioma (L)',
   newGame: 'Nueva partida', newGameConfirm: '¿Empezar una nueva partida? Se reemplazará la partida actual.',

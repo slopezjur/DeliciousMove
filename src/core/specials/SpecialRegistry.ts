@@ -14,11 +14,12 @@ import {
 const isStriped = (s: SpecialType) => s === SpecialType.StripedHorizontal || s === SpecialType.StripedVertical;
 
 /**
- * Marks a tile for destruction and, when it carries its own special, queues it for a
- * chained detonation. Shared by every effect handler (DRY).
+ * Ordinary blasts preserve other specials. Only a direct airplane landing can
+ * activate an incidental special; explicit matches/combos are queued separately.
  */
-function consumeTile(tile: TileData, context: SpecialDetonationContext, affected: number[]): void {
+function consumeTile(tile: TileData, context: SpecialDetonationContext, affected: number[], directLanding = false): void {
   if (!isBlastTarget(tile) || context.protectedTileIds?.has(tile.id)) return;
+  if (tile.special !== SpecialType.None && tile.id !== context.sourceTile.id && !directLanding) return;
   affected.push(tile.id);
   context.destroyedTileIds.add(tile.id);
   if (context.board.canActivate(tile) && tile.id !== context.sourceTile.id) {
@@ -91,7 +92,7 @@ export class ColorBombHandler implements ISpecialEffectHandler {
 
     const colorCounts = new Map<TileColor, number>();
     context.board.forEachTile((t) => {
-      if (!isCandy(t) || !isBlastTarget(t) || context.protectedTileIds?.has(t.id)) return;
+      if (!isCandy(t) || t.special !== SpecialType.None || !isBlastTarget(t) || context.protectedTileIds?.has(t.id)) return;
       colorCounts.set(t.color, (colorCounts.get(t.color) || 0) + 1);
     });
 
@@ -126,7 +127,7 @@ export class AirplaneHandler implements ISpecialEffectHandler {
     // 2. Select target tile to fly to
     const target = this.pickTarget(context);
     if (target) {
-      consumeTile(target, context, affected);
+      consumeTile(target, context, affected, true);
     }
 
     return {
@@ -160,7 +161,7 @@ export class DoubleColorBombComboHandler implements ISpecialComboHandler {
     destroyed.add(a.id);
     destroyed.add(b.id);
     board.forEachTile((t) => {
-      if (isBlastTarget(t)) destroyed.add(t.id);
+      if (isBlastTarget(t) && t.special === SpecialType.None) destroyed.add(t.id);
     });
     return {
       effects: [
@@ -200,7 +201,7 @@ export class ColorBombStripedComboHandler implements ISpecialComboHandler {
 
     const converted: TileData[] = [];
     board.forEachTile((t) => {
-      if (isCandy(t) && t.color === targetColor && isBlastTarget(t) && t.id !== striped.id && t.id !== bomb.id) {
+      if (isCandy(t) && t.special === SpecialType.None && t.color === targetColor && isBlastTarget(t)) {
         if ((board.getCell(t.row, t.col)?.ice ?? 0) > 0) { destroyed.add(t.id); return; }
         t.special =
           this.random.next() > 0.5 ? SpecialType.StripedHorizontal : SpecialType.StripedVertical;
@@ -241,7 +242,7 @@ export class ColorBombAirplaneComboHandler implements ISpecialComboHandler {
 
     const converted: TileData[] = [];
     board.forEachTile((t) => {
-      if (isCandy(t) && t.color === targetColor && isBlastTarget(t) && t.id !== plane.id && t.id !== bomb.id) {
+      if (isCandy(t) && t.special === SpecialType.None && t.color === targetColor && isBlastTarget(t)) {
         if ((board.getCell(t.row, t.col)?.ice ?? 0) > 0) { destroyed.add(t.id); return; }
         t.special = SpecialType.Airplane;
         converted.push(t);
@@ -277,7 +278,7 @@ export class ColorBombNormalComboHandler implements ISpecialComboHandler {
     const affected: number[] = [];
     const secondary: TileData[] = [];
     board.forEachTile((t) => {
-      if (isCandy(t) && t.color === targetColor && isBlastTarget(t) && t.id !== bomb.id) {
+      if (isCandy(t) && t.color === targetColor && isBlastTarget(t) && (t.special === SpecialType.None || t.id === normal.id)) {
         destroyed.add(t.id);
         affected.push(t.id);
         if (board.canActivate(t)) secondary.push(t);
@@ -310,7 +311,7 @@ export class DoubleAirplaneComboHandler implements ISpecialComboHandler {
     for (const source of [a, b]) {
       for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
         const n = board.get(source.row + dr, source.col + dc);
-        if (n && isBlastTarget(n) && !destroyed.has(n.id)) {
+        if (n && n.special === SpecialType.None && isBlastTarget(n) && !destroyed.has(n.id)) {
           destroyed.add(n.id);
           affected.push(n.id);
           if (board.canActivate(n)) secondary.push(n);
@@ -381,7 +382,7 @@ export class AirplaneStripedComboHandler implements ISpecialComboHandler {
       // Cross laser beam at target!
       for (let c = 0; c < board.cols; c++) {
         const t = board.get(target.row, c);
-        if (t && isBlastTarget(t) && !destroyed.has(t.id)) {
+        if (t && (t.special === SpecialType.None || t.id === target.id) && isBlastTarget(t) && !destroyed.has(t.id)) {
           destroyed.add(t.id);
           affected.push(t.id);
           if (board.canActivate(t)) secondary.push(t);
@@ -389,7 +390,7 @@ export class AirplaneStripedComboHandler implements ISpecialComboHandler {
       }
       for (let r = 0; r < board.rows; r++) {
         const t = board.get(r, target.col);
-        if (t && isBlastTarget(t) && !destroyed.has(t.id)) {
+        if (t && (t.special === SpecialType.None || t.id === target.id) && isBlastTarget(t) && !destroyed.has(t.id)) {
           destroyed.add(t.id);
           affected.push(t.id);
           if (board.canActivate(t)) secondary.push(t);
@@ -444,7 +445,7 @@ export class AirplaneWrappedComboHandler implements ISpecialComboHandler {
       for (let r = target.row - 1; r <= target.row + 1; r++) {
         for (let c = target.col - 1; c <= target.col + 1; c++) {
           const t = board.get(r, c);
-          if (t && isBlastTarget(t) && !destroyed.has(t.id)) {
+          if (t && (t.special === SpecialType.None || t.id === target.id) && isBlastTarget(t) && !destroyed.has(t.id)) {
             destroyed.add(t.id);
             affected.push(t.id);
             if (board.canActivate(t)) secondary.push(t);
@@ -479,6 +480,7 @@ function destroyAndCollect(
 ): void {
   const t = board.get(r, c);
   if (!t || !isBlastTarget(t) || destroyed.has(t.id)) return;
+  if (t.special !== SpecialType.None && t.id !== excludeA && t.id !== excludeB) return;
   destroyed.add(t.id);
   affected.push(t.id);
   if (board.canActivate(t) && t.id !== excludeA && t.id !== excludeB) {

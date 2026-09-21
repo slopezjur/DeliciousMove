@@ -229,6 +229,15 @@ describe('TurnCoordinator', () => {
   });
 
   describe('getting stuck', () => {
+    it('fails out of moves without spending remaining shuffles, even on a jammed board', async () => {
+      const session = new GameSession(new FixedProgression({ moves: 1, targetScore: 99999, shuffles: 3 }));
+      const { coordinator, animations } = makeCoordinator({ board: boardWithPendingMatch(), session,
+        deadlockResolver: new StubDeadlockResolver(true, false) });
+      await coordinator.playMove(...MATCH_SWAP);
+      expect(session.getGameOverReason()).toBe(GameOverReason.OutOfMoves);
+      expect(session.getShufflesLeft()).toBe(3);
+      expect(animations.shuffles).toBe(0);
+    });
     it('spends a rescue shuffle when the board jams and the budget allows', async () => {
       const board = boardWithPendingMatch();
       const session = new GameSession(new FixedProgression({ moves: 10, targetScore: 99999, shuffles: 2 }));
@@ -278,8 +287,8 @@ describe('TurnCoordinator', () => {
 
       await coordinator.playMove(...MATCH_SWAP);
 
-      // The shuffle is still shown to the player before the loss is announced.
-      expect(animations.shuffles).toBe(1);
+      // Every remaining rescue is attempted before charging a life.
+      expect(animations.shuffles).toBe(3);
       expect(session.getState()).toBe(GameState.GameOver);
       expect(session.getGameOverReason()).toBe(GameOverReason.Deadlock);
     });

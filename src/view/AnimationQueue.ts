@@ -1,4 +1,6 @@
 import gsap from 'gsap';
+import { CELL_FALL_TIME, planSpawnMotions } from './SpawnMotion.ts';
+import { reducedMotion } from './MotionPreference.ts';
 import { IBoardViewAnimator } from './IBoardViewContracts.ts';
 import { IAnimationSequencer, IHintAnimator } from './IAnimationSequencer.ts';
 import { CascadeStep, Position } from '../core/TileTypes.ts';
@@ -188,7 +190,8 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
         }
 
         // B. Handle normal matched tiles not part of an evolution
-        step.matchedTileIds.forEach((id) => {
+        const colorBurst = step.triggeredSpecials?.some(effect => effect.effectType.includes('color_bomb')) && !reducedMotion();
+        step.matchedTileIds.forEach((id, index) => {
           if (handledIds.has(id)) return;
           handledIds.add(id);
 
@@ -196,7 +199,8 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
           if (sprite) {
             gsap.killTweensOf(sprite);
             gsap.killTweensOf(sprite.scale);
-            this.boardView.vfx.createParticleBurst(sprite.x, sprite.y, sprite.tileData.color);
+            const delay = colorBurst ? Math.min(index * 0.018, 0.3) : 0;
+            tl.call(() => this.boardView.vfx.createParticleBurst(sprite.x, sprite.y, sprite.tileData.color), [], delay);
 
             tl.to(
               sprite.scale,
@@ -206,7 +210,7 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
                 duration: 0.12,
                 ease: 'power1.out',
               },
-              0
+              delay
             ).to(
               sprite,
               {
@@ -214,7 +218,7 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
                 duration: 0.14,
                 ease: 'power2.in',
               },
-              0.06
+              delay + 0.06
             );
           }
         });
@@ -232,7 +236,6 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
       // 4. Animate drops and spawns with constant-velocity lockstep column waterfall
       await new Promise<void>((resolve) => {
         const tl = gsap.timeline({ onComplete: resolve });
-        const CELL_FALL_TIME = 0.065;
 
         // Existing tiles falling down
         step.drops.forEach((drop) => {
@@ -288,38 +291,24 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
           }
         });
 
-        // Group spawns by column to stack above the grid in exact waterfall order
-        const spawnsByCol = new Map<number, typeof step.spawns>();
-        step.spawns.forEach((spawn) => {
-          const list = spawnsByCol.get(spawn.tile.col) || [];
-          list.push(spawn);
-          spawnsByCol.set(spawn.tile.col, list);
-        });
-
-        spawnsByCol.forEach((colSpawns, col) => {
-          const colCount = colSpawns.length;
-          const fallDuration = Math.max(0.08, colCount * CELL_FALL_TIME);
-
-          colSpawns.forEach((spawn) => {
+        for (const { spawn, startRow, delay, duration: fallDuration } of planSpawnMotions(step.spawns)) {
+            const col = spawn.tile.col;
             const sprite = this.boardView.addTileSprite(spawn.tile);
             gsap.killTweensOf(sprite);
             gsap.killTweensOf(sprite.scale);
 
             const targetPos = this.boardView.gridToLocal(spawn.tile.row, col);
 
-            // Stagger position outside the board directly above destination:
-            // Every spawned tile in this column starts at `spawn.tile.row - colCount`
-            // and falls by exactly `colCount` rows, perfectly preserving 1-tile spacing!
-            const startRow = spawn.appearInPlace ? spawn.tile.row : spawn.tile.row - colCount;
             const startPos = this.boardView.gridToLocal(startRow, col);
 
             sprite.x = targetPos.x;
             sprite.y = startPos.y;
             sprite.scale.set(1, 1);
-            sprite.alpha = spawn.appearInPlace ? 0 : 1;
+            sprite.alpha = spawn.appearInPlace || delay > 0 ? 0 : 1;
             sprite.visible = true;
             sprite.zIndex = spawn.tile.row;
 
+            if (delay > 0) tl.set(sprite, { alpha: 1 }, delay);
             tl.to(
               sprite,
               {
@@ -328,7 +317,7 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
                 duration: fallDuration,
                 ease: 'none',
               },
-              0
+              delay
             );
 
             // Crisp tactile landing squash and settle starting strictly on impact
@@ -340,7 +329,7 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
                 duration: 0.05,
                 ease: 'power1.out',
               },
-              fallDuration
+              delay + fallDuration
             ).to(
               sprite.scale,
               {
@@ -349,10 +338,9 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
                 duration: 0.07,
                 ease: 'power1.inOut',
               },
-              fallDuration + 0.05
+              delay + fallDuration + 0.05
             );
-          });
-        });
+        }
       });
 
       // Intermediate step-local alignment: guarantee only this step's discrete movements are snapped

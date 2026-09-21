@@ -4,6 +4,8 @@ import { ISoundService } from '../audio/ISoundService.ts';
 import { SoundManager } from '../audio/SoundManager.ts';
 
 import { LanguageService } from '../i18n/LanguageService.ts';
+import { LivesSnapshot } from '../persistence/PlayerResources.ts';
+import { lifeCountdown } from './LivesView.ts';
 
 export class GameModalView implements IGameModalView {
   private modalEl: HTMLElement | null;
@@ -15,6 +17,8 @@ export class GameModalView implements IGameModalView {
   private modalBtn: HTMLElement | null;
   private soundService: ISoundService;
   private redraw?: () => void;
+  private lives: LivesSnapshot = { lives: 5, maximum: 5, secondsToNext: 0 };
+  private awaitingLife = false;
 
   /**
    * @param onAction Invoked when the player confirms the modal. The caller decides what
@@ -40,6 +44,7 @@ export class GameModalView implements IGameModalView {
   }
 
   public showVictory(score: number, level: number, movesSaved: number = 0, globalScore?: number): void {
+    this.awaitingLife = false;
     this.soundService.playVictory();
     this.redraw = () => {
       const savedMsg = movesSaved > 0
@@ -55,20 +60,39 @@ export class GameModalView implements IGameModalView {
   }
 
   public showGameOver(score: number, level: number, reason: GameOverReason): void {
+    this.awaitingLife = true;
     this.redraw = () => {
       const deadlock = reason === GameOverReason.Deadlock;
       this.render({
         title: this.language.t(deadlock ? 'deadlockTitle' : 'outTitle'),
-        detail: this.language.t(deadlock ? 'deadlockDetail' : 'outDetail') + ' ' + this.language.t('reached', { level }),
-        score, buttonLabel: this.language.t('tryAgain'),
+        detail: this.language.t(deadlock ? 'deadlockDetail' : 'outDetail') + ' ' + this.language.t('retryDetail', { level }) + ' ' + this.waitMessage(),
+        score, buttonLabel: this.language.t(this.lives.lives > 0 ? 'retryLevel' : 'noLives'),
       });
     };
     this.redraw();
   }
 
   public hide(): void {
+    this.awaitingLife = false;
     this.redraw = undefined;
     if (this.modalEl) this.modalEl.classList.add('hidden');
+  }
+
+  public updateLives(snapshot: LivesSnapshot): void {
+    this.lives = snapshot;
+    if (this.awaitingLife) this.redraw?.();
+  }
+
+  public showNoLives(): void {
+    this.awaitingLife = true;
+    this.redraw = () => this.render({ title: this.language.t(this.lives.lives ? 'continuePlay' : 'noLives'), detail: this.waitMessage(), score: 0,
+      buttonLabel: this.language.t(this.lives.lives ? 'continuePlay' : 'noLives') });
+    this.redraw();
+  }
+
+  private waitMessage(): string {
+    return this.lives.lives > 0 ? this.language.t('livesAvailable', { count: this.lives.lives })
+      : this.language.t('waitForLife', { time: lifeCountdown(this.lives.secondsToNext) });
   }
 
   private render(view: {
@@ -91,7 +115,10 @@ export class GameModalView implements IGameModalView {
       }
     }
 
-    if (this.modalBtn) this.modalBtn.textContent = view.buttonLabel;
+    if (this.modalBtn) {
+      this.modalBtn.textContent = view.buttonLabel;
+      (this.modalBtn as HTMLButtonElement).disabled = this.awaitingLife && this.lives.lives === 0;
+    }
     if (this.modalEl) this.modalEl.classList.remove('hidden');
   }
 
