@@ -23,7 +23,6 @@ export class ObjectivesView {
     if (!list) return;
     const varied = this.hasVariedObjectives();
     list.classList.toggle('hidden', !varied);
-    document.getElementById('objectives-instruction')?.classList.toggle('hidden', !varied);
     const scoreGoal = this.progress.find(p => p.objective.kind === 'score');
     const scoreBox = document.getElementById('score-target-box');
     if (scoreBox) {
@@ -50,15 +49,6 @@ export class ObjectivesView {
       const fill = document.getElementById('progress-fill');
       const ratio = this.progress.reduce((sum, p) => sum + p.current / p.objective.target, 0) / this.progress.length;
       if (fill) fill.style.width = `${Math.min(100, ratio * 100)}%`;
-    }
-    const hint = document.getElementById('level-feature-hint');
-    if (hint) {
-      const f = this.config?.features;
-      const key: MessageKey | undefined = f?.blockers.some(b => b.kind === 'chocolate') ? 'hintChocolate'
-        : f?.ingredients.length ? 'hintIngredients' : f?.ice.length ? 'hintIce' : f?.blockers.length ? 'hintBlockers'
-        : f?.shape && f.shape !== 'rectangle' ? 'hintShape' : f?.jelly.length ? 'hintJelly' : undefined;
-      hint.textContent = key ? this.language.t(key) : '';
-      hint.classList.toggle('hidden', !key);
     }
   }
 }

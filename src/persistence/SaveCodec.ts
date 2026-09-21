@@ -5,7 +5,7 @@ import { RandomSnapshot } from '../core/random/IRandomSource.ts';
 import { SpecialType, TileColor } from '../core/TileTypes.ts';
 
 export const SAVE_SCHEMA_VERSION = 3;
-export const GAME_RULES_VERSION = 4;
+export const GAME_RULES_VERSION = 5;
 
 export interface GameSave {
   schemaVersion: number;
@@ -64,6 +64,7 @@ const RULES_MIGRATIONS: MigrationRegistry = new Map([
   [1, input => ({ ...input, rulesVersion: 2 })],
   [2, input => ({ ...input, rulesVersion: 3 })],
   [3, input => ({ ...input, rulesVersion: 4 })],
+  [4, input => ({ ...input, rulesVersion: 5 })],
 ]);
 
 /** Migrations are pure, sequential transforms. Missing upgrade paths preserve the original save. */

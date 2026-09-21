@@ -74,8 +74,10 @@ ties use deterministic scan order (horizontal before vertical; squares top-left 
 
 ## Responsive interface
 
-- Narrow layouts keep level/settings at the top, moves and score progress directly above
-  the board, and total score/rescue shuffles underneath. Windows at least 900px wide
+- Narrow layouts keep level/settings at the top, moves/bank and objective counters directly above
+  the board, and lives, total score and rescue shuffles in one compact footer row. Full
+  lives need no extra caption; the regeneration countdown appears only while refilling.
+  Windows at least 900px wide
   use a sidebar even when taller than they are wide. Short windows at least 600px
   wide also use the compact sidebar.
 - Desktop board size follows available width and height, up to a 1040px canvas.
@@ -83,16 +85,20 @@ ties use deterministic scan order (horizontal before vertical; squares top-left 
   stays centered; no space is reserved for unimplemented features or advertising.
 - Settings contains language, sound, diagnostics, and New Game. The native dialog
   supports keyboard focus containment, Escape, and outside-click dismissal.
-- A compact checkpoint indicator stays visible; full save details are available in
-  Settings. Storage/recovery warnings remain visible beside the game. Saving still
+- Normal checkpoint messages appear only in Settings. Storage/recovery warnings remain
+  visible beside the game. Saving still
   happens only after a completed level, never during a level.
-- Best level cleared and best total score appear beneath the run totals. These lifetime
+- Best level cleared and best total score are available in Settings; desktop also shows
+  them beneath the run totals. These lifetime
   records update only at level completion, survive New Game, and start from an existing
   completed checkpoint when upgrading. Clearing browser site data removes them.
-- CSS owns the board region, using dynamic viewport units and safe-area insets.
+- CSS owns the board region, using dynamic viewport units and safe-area insets. On mobile,
+  intrinsic header/objective/footer rows leave the actual remaining height to the board;
+  there is no fixed pixel allowance for all HUD content. Browser toolbar changes resize
+  that remaining space. The renderer keeps square cells inside the measured region.
   Pixi measures that region via ResizeObserver; canvas/grid resizing is deferred until
   turn playback settles. Extremely short windows can scroll instead of clipping controls.
-  In short landscape layouts the board stays visible while the objective sidebar scrolls.
+  In short landscape layouts the board stays visible while the objective sidebar scrolls independently.
 - Controls have at least 44px touch targets. Long labels and large scores can wrap;
   the board retains square cells and correct input coordinates at every size.
 
@@ -160,7 +166,7 @@ Bonus refills avoid both lines and squares when an allowed color is available,
 including squares containing existing specials.
 The compact **Bonus / Extra ⓘ** button occupies a reserved heading slot. Tap it for
 the explanation of frozen moves and extra scoring. Entering bonus never inserts a
-description above the board or removes the goal hints, so the board stays in place.
+description above the board, so the board stays in place.
 
 When no legal swap or direct special activation remains during bonus play, the level
 ends in victory. The next level receives its base moves plus all unused moves from
@@ -168,8 +174,19 @@ the previous level. Level score resets; global score continues accumulating.
 The HUD separates **Level moves** from **Bank**. Level moves are spent first, then
 the bank is highlighted and spent. Neither budget is spent during bonus play.
 
-Before completing all objectives, exhausting **both** move budgets loses one life
-even if shuffles remain. A deadlock instead uses rescue shuffles first, retrying
+Before completing all objectives, exhausting **both** move budgets starts **Last chance**
+if usable specials remain after the final move's cascades. Those specials activate
+automatically in their original board order, with normal effects, gravity, scoring,
+and objective progress. The queue follows tile IDs through falling and skips specials
+already triggered or replaced. Newly created specials are not added to the queue;
+rocks, ingredients, and ice-locked specials are excluded. Automatic activations consume
+no moves or shuffles and cause no extra chocolate growth. Input stays locked, and the
+compact localized indicator uses the existing bonus heading slot without moving the board.
+
+The entire original queue finishes before deciding the result. If all objectives are
+now complete, bonus play begins (or victory if no legal actions remain). Otherwise,
+one life is lost, even if shuffles remain. With no usable specials, that failure happens
+after the ordinary move finishes. A deadlock instead uses rescue shuffles first, retrying
 failed rescues until one succeeds or all are exhausted; only then is a life lost.
 Each level grants at least one rescue. Opening-board reshuffling is free.
 
@@ -218,14 +235,17 @@ counts remain bounded; difficulty budgets and banked moves still apply.
   gaps or overwrite ice, exits, blockers, ingredients, or special candies. Rejected
   swaps and rescue shuffles do not cause growth. Clearing all chocolate stops it.
 
-The HUD displays localized goals and a context hint. **Settings → Board guide**
-explains the markings. Goal cards wrap on phones and scale with the desktop sidebar;
+The HUD displays localized goal counters without explanatory paragraphs. **Settings → Board guide**
+explains the completion rule and board markings. Goal cards wrap on phones and scale with the desktop sidebar;
 small/short windows can scroll instead of hiding controls.
 
 For isolated local QA, development builds accept `?practiceLevel=2` through
 `?practiceLevel=100` (for example `http://127.0.0.1:3000/?practiceLevel=10`).
 Practice uses seed 20 and an in-memory store, never the player's localStorage save.
 The practice entry point is excluded from production builds. Reload resets practice.
+For a one-move finale fixture, open `?practiceLevel=1&practiceLastChance=1` and tap
+the top-left stripe. It intentionally uses an unreachable score target to demonstrate
+the automatic finale followed by a single life debit; retry restores the fixture.
 
 ## Saved progress
 
@@ -252,6 +272,8 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
 - `BoardInitializer`: initial generation without existing line or square matches.
 - `MatchDetector` and `IMatchRule`: run scanning and prioritized match recognition.
 - `CascadeResolver`: match evolution, detonation, gravity, refill, and score events.
+- `LastChanceQueue`: a bounded queue of original usable special IDs, independent of
+  animation and session state. `TurnCoordinator` runs it before deciding an out-of-moves loss.
 - `TileSpawner`: fills empty cells. `IRefillPolicy.beginWave()` supplies tile selection
   with wave-local state; `RandomRefillPolicy` and `BonusRefillPolicy` own phase rules.
 - `SpecialResolver`: executes handlers registered in `SpecialRegistry`.
@@ -309,6 +331,9 @@ snapshots to diagnose intermediate visual failures. Older reports without those
 fields cannot reproduce an exact unknown action sequence. Browser commands include
 `getState()`, `getHistory()`, `dump()`, `copyReport()`, `toggleOverlay()`,
 `unlockInput()`, and `forceShuffle()`.
+
+Automatic finale actions are recorded as `last_chance`; their replay details include
+`activationContext: 'last_chance'` so replay can suppress extra chocolate growth.
 
 Debug unlock respects whether the session can accept moves. Manual reshuffling is
 ignored while input is locked or the session cannot accept a move.

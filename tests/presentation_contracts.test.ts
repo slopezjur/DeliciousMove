@@ -13,9 +13,23 @@ import { GameSession } from '../src/core/GameSession.ts';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('segregated presentation contracts', () => {
+  it('shows save warnings when needed and removes their occupied row after recovery', () => {
+    const badge = { textContent: '', title: '', hidden: true, dataset: { warning: '' } };
+    const detail = { textContent: '' };
+    vi.stubGlobal('document', { getElementById: (id: string) => id === 'save-status' ? badge : detail });
+    const language = new LanguageService(), view = new SaveStatusView(language);
+    view.render('unavailable');
+    expect(badge.hidden).toBe(false);
+    expect(badge.textContent).toBe(language.t('save_unavailable'));
+    view.render('saved');
+    expect(badge.hidden).toBe(true);
+    expect(badge.textContent).toBe('');
+    expect(detail.textContent).toBe(language.t('save_saved'));
+  });
+
   it.each<SaveStatus>(['none', 'saved', 'unavailable', 'invalid', 'newer', 'incompatible', 'recovered'])(
     'renders %s checkpoint status and refreshes it when language changes', status => {
-      const badge = { textContent: '', title: '', dataset: { warning: '' } }, detail = { textContent: '' };
+      const badge = { textContent: '', title: '', hidden: false, dataset: { warning: '' } }, detail = { textContent: '' };
       vi.stubGlobal('document', { getElementById: (id: string) => id === 'save-status' ? badge : detail });
       const language = new LanguageService(), view = new SaveStatusView(language);
       view.render(status);
@@ -24,8 +38,8 @@ describe('segregated presentation contracts', () => {
         expect(detail.textContent).toBe(language.t(`save_${status}`));
         expect(badge.title).toBe(detail.textContent);
         expect(badge.dataset.warning).toBe(String(warning));
-        expect(badge.textContent).toBe(warning ? detail.textContent
-          : language.t(status === 'saved' ? 'checkpointSaved' : 'checkpointPending'));
+        expect(badge.textContent).toBe(warning ? detail.textContent : '');
+        expect(badge.hidden).toBe(!warning);
         language.toggle();
       }
     },
@@ -33,15 +47,20 @@ describe('segregated presentation contracts', () => {
 
   it('renders records from a read-only provider without storage or write methods', () => {
     const level = { textContent: '' }, score = { textContent: '' };
+    const settingsLevel = { textContent: '' }, settingsScore = { textContent: '' };
     vi.stubGlobal('document', { getElementById: (id: string) =>
-      id === 'best-level-value' ? level : id === 'best-score-value' ? score : null });
+      id === 'best-level-value' ? level : id === 'best-score-value' ? score
+        : id === 'settings-best-level-value' ? settingsLevel : id === 'settings-best-score-value' ? settingsScore : null });
     const language = new LanguageService();
     const view = new RecordsView({ status: 'available', getSnapshot: () => ({ bestLevel: 12, bestScore: 12345 }) }, language);
     view.render();
     expect(level.textContent).toBe('12');
     expect(score.textContent).toBe((12345).toLocaleString(language.locale));
+    expect(settingsLevel.textContent).toBe(level.textContent);
+    expect(settingsScore.textContent).toBe(score.textContent);
     language.toggle();
     expect(score.textContent).toBe((12345).toLocaleString(language.locale));
+    expect(settingsScore.textContent).toBe(score.textContent);
   });
 
   it('animates structural tile visuals without Pixi sprites or a domain board', async () => {

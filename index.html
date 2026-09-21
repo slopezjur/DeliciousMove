@@ -15,7 +15,7 @@
             <span id="level-value" class="hud-value">1</span>
             <span id="difficulty-badge" class="difficulty-badge difficulty-easy">EASY</span>
           </div>
-          <div class="bonus-slot" role="status" aria-live="polite"><button id="bonus-phase-indicator" class="bonus-info-button hidden" aria-haspopup="dialog" aria-controls="bonus-info-dialog" data-i18n-aria-label="bonus" data-i18n-title="bonus"><span data-i18n="bonusShort">Bonus</span> ⓘ</button></div>
+          <div class="bonus-slot" role="status" aria-live="polite"><span id="last-chance-indicator" class="last-chance-indicator hidden" data-i18n="lastChance" data-i18n-title="lastChanceTip">Last chance</span><button id="bonus-phase-indicator" class="bonus-info-button hidden" aria-haspopup="dialog" aria-controls="bonus-info-dialog" data-i18n-aria-label="bonus" data-i18n-title="bonus"><span data-i18n="bonusShort">Bonus</span> ⓘ</button></div>
           <button id="settings-toggle-btn" class="icon-button" aria-haspopup="dialog" aria-controls="settings-dialog" data-i18n-aria-label="settings" data-i18n-title="settings">⚙</button>
         </div>
         <section class="gameplay-stats">
@@ -37,9 +37,7 @@
             </div>
             <div class="progress-track"><div id="progress-fill"></div></div>
           </div>
-          <p id="objectives-instruction" class="feature-hint hidden" data-i18n="allRequired"></p>
           <div id="objectives-list" class="objective-list hidden" role="status" aria-live="polite" aria-atomic="true"></div>
-          <p id="level-feature-hint" class="feature-hint hidden"></p>
         </section>
         <footer class="run-summary">
           <div class="lives-row"><span class="hud-label" data-i18n="lives">Lives</span><strong id="lives-value">♥ 5/5</strong><span id="lives-timer"></span></div>
@@ -54,12 +52,12 @@
               <span id="shuffles-value" class="hud-value">4</span>
             </div>
           </div>
-          <div class="personal-records" data-i18n-title="recordsTip">
+          <div class="personal-records hud-records" data-i18n-title="recordsTip">
             <div class="summary-stat"><span class="hud-label" data-i18n="bestLevel">Best level cleared</span><strong id="best-level-value">0</strong></div>
             <div class="summary-stat"><span class="hud-label" data-i18n="bestScore">Best total score</span><strong id="best-score-value">0</strong></div>
           </div>
           <p id="records-status" class="records-warning hidden" role="status"></p>
-          <div id="save-status" role="status" aria-live="polite"></div>
+          <div id="save-status" role="status" aria-live="polite" hidden></div>
         </footer>
       </header>
       <div id="board-viewport"></div>
@@ -84,8 +82,13 @@
           <button id="sound-toggle-btn" data-i18n-title="soundTip">On</button>
         </div>
         <p id="save-detail"></p>
+        <div class="personal-records settings-records" data-i18n-title="recordsTip">
+          <div class="summary-stat"><span class="hud-label" data-i18n="bestLevel">Best level cleared</span><strong id="settings-best-level-value">0</strong></div>
+          <div class="summary-stat"><span class="hud-label" data-i18n="bestScore">Best total score</span><strong id="settings-best-score-value">0</strong></div>
+        </div>
         <details class="feature-help">
           <summary data-i18n="featureHelp">Board guide</summary>
+          <p data-i18n="allRequired"></p>
           <p data-i18n="hintJelly"></p>
           <p data-i18n="hintIce"></p>
           <p data-i18n="hintBlockers"></p>

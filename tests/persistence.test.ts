@@ -34,6 +34,12 @@ function fixture(): GameSave {
 }
 
 describe('versioned saves', () => {
+  it('migrates pre-finale rules without changing the saved board, counters, or completion state', () => {
+    const original = fixture(); original.rulesVersion = 4;
+    const migrated = new SaveCodec().decode(JSON.stringify(original));
+    expect(migrated).toEqual({ ...JSON.parse(JSON.stringify(original)), rulesVersion: 5 });
+    expect(original.rulesVersion).toBe(4);
+  });
   it('allows a codec substitute without requiring migration internals', () => {
     const storage = new MemoryStorage(), save = fixture();
     save.session.state = GameState.Victory;

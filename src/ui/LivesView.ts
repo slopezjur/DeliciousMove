@@ -11,7 +11,7 @@ export class LivesView {
     if (typeof document === 'undefined') return;
     const value = document.getElementById('lives-value'), timer = document.getElementById('lives-timer');
     if (value) value.textContent = `♥ ${snapshot.lives}/${snapshot.maximum}`;
-    if (timer) timer.textContent = snapshot.secondsToNext ? this.language.t('nextLife', { time: lifeCountdown(snapshot.secondsToNext) }) : this.language.t('livesFull');
+    if (timer) timer.textContent = snapshot.secondsToNext ? this.language.t('nextLife', { time: lifeCountdown(snapshot.secondsToNext) }) : '';
     const warning = document.getElementById('resources-warning');
     if (warning) {
       warning.classList.toggle('hidden', status === 'available');

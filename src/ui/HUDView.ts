@@ -25,6 +25,7 @@ export class HUDView implements IHUDView {
   private targetScore = 4000;
   private displayedScore = 0;
   private bonusActive = false;
+  private lastChanceActive = false;
   private animFrameId: number = 0;
 
   constructor(private readonly language = new LanguageService()) {
@@ -47,6 +48,7 @@ export class HUDView implements IHUDView {
   }
 
   public initLevel(config: LevelConfig, bonusMoves: number = 0, globalScore: number = 0): void {
+    this.setLastChance(false);
     this.objectivesView.setLevel(config);
     this.difficulty = config.difficulty;
     this.globalScore = globalScore;
@@ -102,14 +104,19 @@ export class HUDView implements IHUDView {
 
   private showBonus(active: boolean): void {
     this.bonusActive = active;
-    this.bonusPhaseBadgeEl?.classList.toggle('hidden', !active);
+    this.bonusPhaseBadgeEl?.classList.toggle('hidden', !active || this.lastChanceActive);
     this.progressFill?.classList.toggle('bonus-phase-glow', active);
     if (active) {
-      this.bonusPhaseBadgeEl?.classList.remove('hidden');
       this.movesEl?.classList.remove('low-moves');
       this.movesEl?.classList.add('frozen-moves');
       this.progressFill?.classList.add('bonus-phase-glow');
     }
+  }
+
+  public setLastChance(active: boolean): void {
+    this.lastChanceActive = active;
+    this.findElement('last-chance-indicator')?.classList.toggle('hidden', !active);
+    this.showBonus(this.bonusActive);
   }
 
   public addScore(amount: number, globalScore?: number, isBonusPhase?: boolean): void {

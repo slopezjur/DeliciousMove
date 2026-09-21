@@ -306,6 +306,7 @@ export class Game {
       },
       onShufflesUpdated: (shuffles) => this.hud.updateShuffles(shuffles),
       onStateChanged: (state, snapshot) => {
+        this.hud.setLastChance(state === GameState.LastChance);
         if (state === GameState.Victory) {
           this.idleHintController.stop();
           this.telemetry.recordStateTransition('victory', `Score: ${snapshot.score}`);

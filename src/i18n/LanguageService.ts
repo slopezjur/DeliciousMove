@@ -4,6 +4,7 @@ export type Locale = 'en' | 'es';
 export const LANGUAGE_KEY = 'deliciousmove.language';
 
 const en = {
+  lastChance: 'Last chance', lastChanceTip: 'No moves left. Remaining specials activate before the level result is decided.',
   bonusShort: 'Bonus',
   levelMoves: 'Level moves', bankMoves: 'Bank', lives: 'Lives', livesFull: 'Full', nextLife: '+1 in {time}',
   retryLevel: 'Retry level', continuePlay: 'Continue', noLives: 'No lives left', livesAvailable: 'Lives left: {count}.',
@@ -16,7 +17,7 @@ const en = {
   recordsUnavailable: 'Records cannot be saved in this browser.',
   recordsPreserved: 'Unreadable or newer records preserved; record saving is paused.',
   bonusExplanation: 'Objectives complete! Moves are frozen. Keep matching for extra points until no moves remain.',
-  allRequired: 'Complete every goal below to unlock the bonus round.',
+  allRequired: 'Complete every level objective to unlock the bonus round.',
   objectives: 'Objectives', practiceMode: 'Practice level {level} · Progress is not saved',
   collectColor: 'Collect {color}', clearBlocker: 'Clear {blocker}',
   objective_score: 'Minimum score', objective_jelly: 'Clear jelly', objective_ingredient: 'Deliver cherries',
@@ -65,6 +66,7 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 const es: Record<MessageKey, string> = {
+  lastChance: 'Última oportunidad', lastChanceTip: 'Sin movimientos. Se activan los especiales restantes antes de decidir el resultado del nivel.',
   bonusShort: 'Extra',
   levelMoves: 'Del nivel', bankMoves: 'Reserva', lives: 'Vidas', livesFull: 'Completas', nextLife: '+1 en {time}',
   retryLevel: 'Reintentar nivel', continuePlay: 'Continuar', noLives: 'Sin vidas', livesAvailable: 'Vidas restantes: {count}.',
@@ -77,7 +79,7 @@ const es: Record<MessageKey, string> = {
   recordsUnavailable: 'No se pueden guardar los récords en este navegador.',
   recordsPreserved: 'Récords ilegibles o más recientes conservados; su guardado está pausado.',
   bonusExplanation: '¡Objetivos completados! Los movimientos están congelados. Sigue combinando para sumar puntos hasta que no queden jugadas.',
-  allRequired: 'Completa todos estos objetivos para desbloquear la ronda extra.',
+  allRequired: 'Completa todos los objetivos del nivel para desbloquear la ronda extra.',
   objectives: 'Objetivos', practiceMode: 'Nivel de práctica {level} · No se guarda el progreso',
   collectColor: 'Recoge {color}', clearBlocker: 'Elimina {blocker}',
   objective_score: 'Puntuación mínima', objective_jelly: 'Elimina gelatina', objective_ingredient: 'Entrega cerezas',

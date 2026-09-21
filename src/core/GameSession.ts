@@ -10,6 +10,7 @@ import { ObjectiveTracker } from './ObjectiveTracker.ts';
 export enum GameState {
   Ready = 'ready',
   Resolving = 'resolving',
+  LastChance = 'last_chance',
   Victory = 'victory',
   GameOver = 'game_over',
 }
@@ -87,6 +88,7 @@ export interface IGameSession {
   getSnapshot(): SessionSnapshot;
   canMakeMove(): boolean;
   onMoveInitiated(): void;
+  beginLastChance(): boolean;
   addPoints(points: number): void;
   consumeShuffle(): boolean;
   endWithDeadlock(): GameState;
@@ -118,7 +120,7 @@ export class GameSession implements IGameSession {
   }
 
   public exportState(): SessionSaveState {
-    if (this.state === GameState.Resolving) throw new Error('Cannot save an unfinished turn.');
+    if (this.state === GameState.Resolving || this.state === GameState.LastChance) throw new Error('Cannot save an unfinished turn.');
     return {
       objectiveProgress: this.getObjectives().map(p => p.current),
       config: { ...this.config }, score: this.currentScore, globalScore: this.globalScore,
@@ -257,7 +259,7 @@ export class GameSession implements IGameSession {
   }
 
   public isBonusPhase(): boolean {
-    return this.isTargetReached() && this.state !== GameState.GameOver && this.state !== GameState.Victory;
+    return this.isTargetReached() && (this.state === GameState.Ready || this.state === GameState.Resolving);
   }
 
   public completeWithVictory(): GameState {
@@ -314,6 +316,13 @@ export class GameSession implements IGameSession {
     this.globalScore += points;
     this.notifyScore(points);
     this.notifyObjectives();
+  }
+
+  /** The coordinator owns the finite automatic queue; no extra player move is charged. */
+  public beginLastChance(): boolean {
+    if (this.state !== GameState.Resolving || this.movesLeft !== 0 || this.isTargetReached()) return false;
+    this.setState(GameState.LastChance);
+    return true;
   }
 
   /**

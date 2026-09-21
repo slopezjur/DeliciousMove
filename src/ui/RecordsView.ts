@@ -10,8 +10,10 @@ export class RecordsView {
     if (typeof document === 'undefined') return;
     const snapshot = this.records.getSnapshot();
     for (const [id, value] of [['best-level-value', snapshot.bestLevel], ['best-score-value', snapshot.bestScore]] as const) {
-      const element = document.getElementById(id);
-      if (element) element.textContent = value.toLocaleString(this.language.locale);
+      for (const targetId of [id, `settings-${id}`]) {
+        const element = document.getElementById(targetId);
+        if (element) element.textContent = value.toLocaleString(this.language.locale);
+      }
     }
     const warning = document.getElementById('records-status');
     if (warning) {

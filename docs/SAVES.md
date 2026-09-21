@@ -6,6 +6,9 @@ The game stores progress in browser localStorage, not cookies. Nothing is upload
 Only a completed level creates a checkpoint, after its final animations and bonus
 phase finish. Ordinary moves, completing objectives, rescue shuffles, a loss,
 and starting the next level do not overwrite that checkpoint.
+The automatic Last chance finale is also transient: no checkpoint or life debit
+occurs during its playback. Failure is charged only after it finishes without
+completing all objectives; a successful rescue enters the existing bonus phase.
 
 Reloading restores the victory screen if the next level has not started. Otherwise,
 the next level restarts using the checkpoint's global score and the resource ledger's
@@ -89,7 +92,7 @@ original before allowing a new checkpoint.
 
 ## Adding a breaking change
 
-The current save format is **schema 3 / rules 4**. Installed 1→2 migrations retain
+The current save format is **schema 3 / rules 5**. Installed 1→2 migrations retain
 the original board, score, level, banked moves, global score, and RNG. A legacy
 checkpoint receives an explicit score objective and matching progress. Missing
 terrain means a full rectangle. It still resumes at its victory screen; only
@@ -102,9 +105,12 @@ Schema 2→3 splits the old total move count into `levelMovesLeft` and remaining
 bank, old total). Their sum must equal `movesLeft`; base cannot exceed the saved level
 allowance. Rules 3→4 preserves existing checkpoint configuration and completion. New
 levels/retries use the lower move allowances and incidental-special protection rules.
+Rules 4→5 preserves the entire checkpoint and RNG unchanged while enabling Last chance
+on future turns. Previously recorded failures are not retroactively rescued or refunded.
+The `last_chance` session state is transient and cannot be exported as a checkpoint.
 
 Migration occurs in memory on load and never rewrites the original raw checkpoint.
-The next completed-level save writes schema 3 / rules 4 and rotates the readable original to backup.
+The next completed-level save writes schema 3 / rules 5 and rotates the readable original to backup.
 Older clients must reject newer saves rather than reinterpret their counters or cell/object data.
 Old diagnostic turn replays may produce different results after a gameplay bug fix;
 exact replay still requires the game revision that produced the report.

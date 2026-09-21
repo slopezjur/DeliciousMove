@@ -5,6 +5,7 @@ import { LevelDifficulty } from '../LevelProgression.ts';
 export type TelemetryActionType =
   | 'swap'
   | 'activate'
+  | 'last_chance'
   | 'shuffle'
   | 'level_start'
   | 'victory'
@@ -27,6 +28,7 @@ export interface TelemetryMoveRecord {
 }
 
 export interface TurnReplayDetails {
+  activationContext?: 'last_chance';
   boardBefore: import('../Board.ts').BoardSnapshot;
   boardAfter: import('../Board.ts').BoardSnapshot;
   sessionBefore: SessionSnapshot;
@@ -60,7 +62,7 @@ export interface TelemetryStateSnapshot {
 export interface IGameTelemetryService {
   recordTurnDetails?(details: TurnReplayDetails): void;
   recordSwap(from: Position, to: Position, valid: boolean, scoreGained: number, stepsCount: number, specialsFormed?: string[], specialsTriggered?: string[]): void;
-  recordActivation(pos: Position, specialType: SpecialType, scoreGained: number, stepsCount: number, specialsTriggered?: string[]): void;
+  recordActivation(pos: Position, specialType: SpecialType, scoreGained: number, stepsCount: number, specialsTriggered?: string[], context?: 'player' | 'last_chance'): void;
   recordShuffle(reason: string, success: boolean): void;
   recordStateTransition(action: TelemetryActionType, notes?: string): void;
   getRecentMoves(count?: number): TelemetryMoveRecord[];

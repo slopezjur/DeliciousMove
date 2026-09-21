@@ -68,12 +68,13 @@ export class GameTelemetryService implements IGameTelemetryService {
     specialType: SpecialType,
     scoreGained: number,
     stepsCount: number,
-    specialsTriggered: string[] = []
+    specialsTriggered: string[] = [],
+    context: 'player' | 'last_chance' = 'player'
   ): void {
     this.pushRecord({
       id: ++this.sequenceCounter,
       timestamp: new Date().toISOString().substring(11, 23),
-      action: 'activate',
+      action: context === 'last_chance' ? 'last_chance' : 'activate',
       from: { ...pos },
       specialType,
       valid: true,

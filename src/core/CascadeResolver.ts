@@ -24,6 +24,8 @@ import {
 /** Guards against a pathological board feeding cascades forever. */
 const MAX_CASCADE_ITERATIONS = 25;
 
+export type ActivationContext = 'player' | 'last_chance';
+
 interface SpawnTargetSelection {
   target: TileData;
   /** Special that the spawn overwrote and that must still detonate, if any. */
@@ -32,7 +34,7 @@ interface SpawnTargetSelection {
 
 export interface ICascadeResolver {
   resolveSwap(board: Board, posA: Position, posB: Position, avoidMatches?: boolean): SwapResult;
-  resolveActivation(board: Board, pos: Position, avoidMatches?: boolean): SwapResult;
+  resolveActivation(board: Board, pos: Position, avoidMatches?: boolean, context?: ActivationContext): SwapResult;
 }
 
 export class CascadeResolver implements ICascadeResolver {
@@ -60,7 +62,7 @@ export class CascadeResolver implements ICascadeResolver {
   /**
    * Direct detonation of a clicked special candy.
    */
-  public resolveActivation(board: Board, pos: Position, avoidMatches = false): SwapResult {
+  public resolveActivation(board: Board, pos: Position, avoidMatches = false, context: ActivationContext = 'player'): SwapResult {
     const tile = board.get(pos.row, pos.col);
     if (!tile || !board.canActivate(pos)) {
       return { valid: false, steps: [] };
@@ -75,7 +77,8 @@ export class CascadeResolver implements ICascadeResolver {
       this.executeDestroyAndCollapse(board, destroyedTileIds, [], [], effects, 1, avoidMatches)
     );
     this.continueCascades(board, steps, 2, avoidMatches);
-    return this.finishTurn(board, steps);
+    // The finale extends the last player turn; automatic activations are not new growth turns.
+    return context === 'last_chance' ? { valid: true, steps } : this.finishTurn(board, steps);
   }
 
   /**

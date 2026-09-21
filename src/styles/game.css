@@ -18,13 +18,14 @@ button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
 .objective-icon[data-color="3"] { color: #ffe23b; }
 .objective-icon[data-color="4"] { color: #d75aff; }
 .objective-icon[data-color="5"] { color: #ff9e30; }
-.feature-hint { grid-column: 1 / -1; color: #c8b8d8; font-size: 11px; line-height: 1.45; }
 .practice-banner { margin-top: 10px; padding: 8px; font-size: 11px; color: #ffe082; border: 1px dashed #ffe08266; border-radius: 8px; }
 .personal-records { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #ffffff1a; }
 .personal-records strong { color: #ffe082; font-size: 16px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .personal-records .summary-stat { justify-content: space-between; }
+.settings-records { margin: 0 0 12px; padding: 12px 0; }
 .records-warning { font-size: 11px; color: #ffe082; margin-top: 8px; }
-.bonus-slot { flex: 0 0 48px; height: 44px; margin-left: auto; }
+.bonus-slot { flex: 0 0 80px; height: 44px; margin-left: auto; }
+.last-chance-indicator { display: flex; align-items: center; justify-content: center; width: 100%; height: 44px; padding: 4px; border: 1px solid #ffbf6980; border-radius: 12px; color: #ffe082; background: #402910; font-size: 10px; font-weight: 800; line-height: 1.15; text-align: center; overflow-wrap: anywhere; }
 .bonus-info-button { width: 100%; height: 44px; padding: 4px; font-size: 10px; font-weight: 800; color: #64e9ff; border-color: #64e9ff66; background: #123039; }
 .bank-moves { font-size: 12px; color: #beb0cf; padding: 3px 6px; border: 1px solid transparent; border-radius: 6px; }
 .bank-moves strong { font-variant-numeric: tabular-nums; color: #64e9ff; }
@@ -32,6 +33,7 @@ button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
 .lives-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 #lives-value { color: #ff86a5; font-variant-numeric: tabular-nums; }
 #lives-timer { margin-left: auto; color: #beb0cf; font-size: 11px; font-variant-numeric: tabular-nums; }
+#lives-timer:empty { display: none; }
 #bonus-info-dialog { margin: auto; width: min(400px, calc(100% - 32px)); padding: 20px; border-radius: 22px; border: 1px solid #64e9ff66; background: #211232; color: #fff; line-height: 1.5; max-height: calc(100dvh - 32px); overflow-y: auto; }
 #bonus-info-dialog::backdrop { background: #090410b3; }
 .settings-row select { font: inherit; color: inherit; background: #130a22; border: 1px solid #ffffff40; border-radius: 12px; min-height: 44px; min-width: 120px; padding: 8px; }
@@ -40,8 +42,8 @@ button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
 .feature-help summary { min-height: 44px; padding: 12px 0; cursor: pointer; color: #ffe082; }
 .feature-help summary:focus-visible { outline: 2px solid #ffe082; }
 .feature-help p { margin: 8px 0; }
-@media (min-width: 360px) and (max-width: 899px) and (min-height: 541px) {
-  .objective-list { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); }
+@media (max-width: 899px) {
+  .hud-records { display: none; }
 }
 #game-container {
   /* Size the whole gameplay group from the space available to the square board. */
@@ -106,17 +108,33 @@ button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
   #top-hud { display: contents; }
   #game-container {
     width: min(100%, 580px); grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto; grid-template-areas: "heading" "primary" "board" "summary";
-    align-content: start; gap: 12px; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    /* Intrinsic HUD/footer rows leave the remaining dynamic viewport for the board.
+       The minimum board height deliberately allows scrolling at extreme sizes/zoom. */
+    height: 100vh; height: 100dvh; min-height: 0;
+    grid-template-rows: auto auto minmax(min(272px, calc(100vw - 24px)), 1fr) auto;
+    grid-template-areas: "heading" "primary" "board" "summary";
+    align-content: start; gap: 8px; padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
   .game-heading { padding: 0 4px; }
-  .gameplay-stats { grid-template-columns: minmax(86px, 1fr) minmax(0, 2.2fr); gap: 12px; align-items: center; padding: 12px; border-radius: 16px; }
-  #moves-value { font-size: 34px; }
+  .gameplay-stats { grid-template-columns: minmax(80px, 1fr) minmax(0, 2.2fr); gap: 8px; align-items: center; padding: 10px; border-radius: 16px; }
+  #moves-value { font-size: 30px; }
   .hud-label { font-size: 10px; letter-spacing: .2px; }
   .progress-num { font-size: clamp(15px, 4vw, 20px); }
-  #board-viewport { max-width: min(100%, max(272px, calc(100dvh - 248px))); }
-  .run-summary { padding: 0 8px; }
-  #save-status { margin-top: 10px; text-align: center; }
+  .objective-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .objective-item:only-child { grid-column: 1 / -1; }
+  .objective-item { padding: 6px; grid-template-columns: 20px minmax(0, 1fr) auto; }
+  .objective-icon { font-size: 18px; }
+  #board-viewport { height: 100%; min-height: 0; max-width: none; aspect-ratio: auto; align-self: stretch; }
+  .run-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 4px 10px; padding: 0 4px; align-items: start; }
+  .secondary-stats { display: contents; }
+  .lives-row { flex-direction: column; align-items: flex-start; gap: 4px; margin: 0; min-width: 0; }
+  #lives-value, .summary-stat .hud-value { font-size: 18px; line-height: 1.2; }
+  #lives-timer { margin: 0; }
+  #global-score-card { text-align: center; }
+  .run-summary > .records-warning, #save-status, .practice-banner { grid-column: 1 / -1; }
+  /* Warnings follow the stats rather than displacing a column in their shared row. */
+  .run-summary > .records-warning, #save-status { order: 1; }
+  #save-status { margin-top: 4px; text-align: center; }
 }
 /* Typography and spacing grow with the board, not independently with screen width. */
 @media (min-width: 900px) and (min-height: 541px) {
@@ -128,7 +146,6 @@ button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
   #top-hud .progress-num { font-size: calc(18 * var(--ui-unit)); }
   #top-hud .objective-item { font-size: calc(12 * var(--ui-unit)); }
   #top-hud .objective-item strong { font-size: calc(14 * var(--ui-unit)); }
-  #top-hud .feature-hint { font-size: calc(11 * var(--ui-unit)); }
   #top-hud .gameplay-stats { padding: calc(20 * var(--ui-unit)); gap: calc(20 * var(--ui-unit)); }
   #top-hud .progress-container { gap: calc(8 * var(--ui-unit)); }
   #top-hud .progress-track { height: calc(10 * var(--ui-unit)); }
@@ -137,8 +154,8 @@ button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
   #save-status { font-size: calc(11 * var(--ui-unit)); margin-top: calc(14 * var(--ui-unit)); }
 }
 @media (min-width: 600px) and (max-height: 540px) {
-  #top-hud { gap: 12px; }
-  #game-container { width: min(100%, calc(100dvh + 290px)); gap: 10px 16px; grid-template-columns: minmax(200px, 250px) minmax(0, 1fr); padding-top: max(8px, env(safe-area-inset-top)); padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  #top-hud { gap: 12px; max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom))); overflow-y: auto; }
+  #game-container { height: 100dvh; min-height: 0; width: min(100%, calc(100dvh + 290px)); gap: 10px 16px; grid-template-columns: minmax(200px, 250px) minmax(0, 1fr); padding-top: max(8px, env(safe-area-inset-top)); padding-bottom: max(8px, env(safe-area-inset-bottom)); }
   .gameplay-stats { gap: 10px; padding: 12px; }
   #moves-value { font-size: 32px; }
   #board-viewport { max-width: calc(100dvh - 24px); align-self: start; position: sticky; top: max(8px, env(safe-area-inset-top)); }

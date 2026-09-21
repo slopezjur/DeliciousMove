@@ -8,7 +8,8 @@ import { SeededRandomSource } from '../src/core/random/IRandomSource.ts';
 import { BoardView } from '../src/view/BoardView.ts';
 import { SAVE_KEY } from '../src/persistence/SaveStore.ts';
 import { RECORDS_KEY } from '../src/persistence/RecordsStore.ts';
-import { Position } from '../src/core/TileTypes.ts';
+import { Position, SpecialType, CascadeStep } from '../src/core/TileTypes.ts';
+import { LevelDifficulty } from '../src/core/LevelProgression.ts';
 import { BoardInitializer } from '../src/core/BoardInitializer.ts';
 import { GameSave, SaveCodec, SAVE_SCHEMA_VERSION, GAME_RULES_VERSION } from '../src/persistence/SaveCodec.ts';
 
@@ -48,7 +49,7 @@ function environment() {
     init: vi.fn().mockResolvedValue(undefined), stage: { addChild: vi.fn() },
     canvas: {}, renderer: { resize: vi.fn() },
   } as unknown as Application;
-  const hud = { initLevel: vi.fn(), addScore: vi.fn(), updateMoves: vi.fn(), updateShuffles: vi.fn() };
+  const hud = { initLevel: vi.fn(), addScore: vi.fn(), updateMoves: vi.fn(), updateShuffles: vi.fn(), setLastChance: vi.fn() };
   const modal = { showVictory: vi.fn(), showGameOver: vi.fn(), hide: vi.fn() };
   const idleHintController = { start: vi.fn(), stop: vi.fn(), resetTimer: vi.fn() };
   const container = { appendChild: vi.fn() } as unknown as HTMLElement;
@@ -66,6 +67,61 @@ function saveFixture(session: GameSession): GameSave {
 }
 
 describe('game checkpoint lifecycle', () => {
+  it.each([false, true])('charges a life only after unsuccessful finale playback (rescued=%s)', async rescued => {
+    const env = environment(), board = new Board(), view = new BoardView(board);
+    const session = new GameSession({ getConfig: level => ({ level, moves: 1, shuffles: 3,
+      targetScore: 100, difficulty: LevelDifficulty.Easy }) });
+    let entered = () => {}, release = () => {};
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const game = new Game({ ...env, board, boardView: view, session,
+      boardInitializer: { populate(b) {
+        new BoardInitializer(new SeededRandomSource(20)).populate(b);
+        b.get(7, 7)!.special = SpecialType.StripedHorizontal;
+      } },
+      cascadeResolver: {
+        resolveSwap: () => ({ valid: true, steps: [] }),
+        resolveActivation: (b, pos) => {
+          b.get(pos.row, pos.col)!.special = SpecialType.None;
+          return { valid: true, steps: [{ matchedTileIds: [], spawnedSpecials: [], drops: [], spawns: [], scoreGained: rescued ? 100 : 10 }] };
+        },
+      },
+      animationQueue: {
+        animateSwap: async () => {}, animateShuffle: async () => {}, animateHint: () => {},
+        playCascadeSteps: async (steps: CascadeStep[], record) => {
+          if (session.getState() === GameState.LastChance) {
+            entered(); await new Promise<void>(resolve => { release = resolve; });
+          }
+          steps.forEach(s => record(s.scoreGained, s.objectiveEvents));
+        },
+      },
+      deadlockResolver: { hasPossibleMoves: () => true, findPossibleMoves: () => [],
+        shuffleBoard: () => ({ success: true, mapping: new Map() }) },
+    });
+    try {
+      await game.init(env.container);
+      const resources = new PlayerResources(env.storage);
+      const playing = captured.swap!({ row: 0, col: 0 }, { row: 0, col: 1 });
+      await started;
+      expect(env.hud.setLastChance).toHaveBeenLastCalledWith(true);
+      expect(resources.snapshot().lives).toBe(5);
+      expect(env.modal.showGameOver).not.toHaveBeenCalled();
+      expect(env.storage.getItem(SAVE_KEY)).toBeNull();
+      expect(await captured.swap!({ row: 0, col: 0 }, { row: 0, col: 1 })).toBe(false);
+      game.startNewGame();
+      expect(session.getState()).toBe(GameState.LastChance);
+      release(); await playing;
+      expect(resources.snapshot().lives).toBe(rescued ? 5 : 4);
+      expect(session.getState()).toBe(rescued ? GameState.Ready : GameState.GameOver);
+      expect(env.hud.setLastChance).toHaveBeenLastCalledWith(false);
+      expect(env.storage.getItem(SAVE_KEY)).toBeNull();
+      if (!rescued) {
+        (game as unknown as { onModalAction(): void }).onModalAction();
+        expect(resources.snapshot().lives).toBe(4);
+        expect(session.getSnapshot()).toMatchObject({ movesLeft: 1, shufflesLeft: 3, score: 0, globalScore: 0 });
+      }
+    } finally { view.destroy({ children: true }); }
+  });
+
   it.each([false, true])('reconciles accepted mid-level saves without refunding bank or losing failure (failed=%s)', async failed => {
     const env = environment(), original = new GameSession();
     original.startLevel(1, 3);

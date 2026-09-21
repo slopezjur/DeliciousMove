@@ -18,8 +18,8 @@ export class SaveStatusView {
     const detailElement = document.getElementById('save-detail');
     if (detailElement) detailElement.textContent = detail;
     if (element) {
-      element.textContent = warning ? detail : this.language.t(
-        status === 'saved' ? 'checkpointSaved' : 'checkpointPending');
+      element.textContent = warning ? detail : '';
+      element.hidden = !warning;
       element.title = detail;
       element.dataset.warning = String(warning);
     }

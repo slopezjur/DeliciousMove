@@ -6,6 +6,7 @@ import { IGameSession } from './core/GameSession.ts';
 import { Position, SpecialType } from './core/TileTypes.ts';
 import { IAnimationSequencer } from './view/IAnimationSequencer.ts';
 import { IGameTelemetryService } from './core/telemetry/IGameTelemetry.ts';
+import { LastChanceQueue } from './core/LastChanceQueue.ts';
 
 export interface ITurnCoordinator {
   playMove(from: Position, to: Position): Promise<boolean>;
@@ -16,7 +17,7 @@ export interface ITurnCoordinator {
 export type ITurnSession = Pick<IGameSession,
   'canMakeMove' | 'getSnapshot' | 'isTargetReached' | 'getScore' | 'onMoveInitiated'
   | 'addPoints' | 'recordObjectiveEvents' | 'onTurnCompleted' | 'getMovesLeft'
-  | 'completeWithVictory' | 'consumeShuffle' | 'endWithDeadlock'>;
+  | 'completeWithVictory' | 'consumeShuffle' | 'endWithDeadlock' | 'beginLastChance'>;
 
 export type ITurnTelemetry = Pick<IGameTelemetryService,
   'recordTurnDetails' | 'recordSwap' | 'recordActivation' | 'recordShuffle'>;
@@ -107,7 +108,8 @@ export class TurnCoordinator implements ITurnCoordinator {
     const specialsTriggered = result.steps.flatMap((s) => s.triggeredSpecials?.map((t) => t.effectType) ?? []);
     this.telemetry?.recordSwap(from, to, true, scoreGained, result.steps.length, specialsFormed, specialsTriggered);
 
-    // 3. Settle the board, then close the turn.
+    // 3. Give existing specials a final chance before charging a failure.
+    await this.playLastChance();
     await this.settleDeadlocks();
     this.session.onTurnCompleted();
     return true;
@@ -146,9 +148,39 @@ export class TurnCoordinator implements ITurnCoordinator {
     const specialsTriggered = result.steps.flatMap((s) => s.triggeredSpecials?.map((t) => t.effectType) ?? []);
     this.telemetry?.recordActivation(pos, spec, scoreGained, result.steps.length, specialsTriggered);
 
+    await this.playLastChance();
     await this.settleDeadlocks();
     this.session.onTurnCompleted();
     return true;
+  }
+
+  private async playLastChance(): Promise<void> {
+    if (this.session.getMovesLeft() !== 0 || this.session.isTargetReached()) return;
+    const queue = new LastChanceQueue(this.board);
+    let tile = queue.next(this.board);
+    if (!tile || !this.session.beginLastChance()) return;
+
+    while (tile) {
+      const from = { row: tile.row, col: tile.col };
+      const boardBefore = this.board.getSnapshot(), sessionBefore = this.session.getSnapshot();
+      const randomBefore = this.getRandomSnapshot?.();
+      const result = this.cascadeResolver.resolveActivation(this.board, from, false, 'last_chance');
+      if (result.valid) {
+        queue.record(result.steps);
+        this.telemetry?.recordTurnDetails?.({
+          boardBefore, sessionBefore, randomBefore, from, activationContext: 'last_chance',
+          boardAfter: this.board.getSnapshot(), steps: result.steps,
+        });
+        const scoreBefore = this.session.getScore();
+        await this.animations.playCascadeSteps(result.steps, (points, events) => {
+          this.session.addPoints(points);
+          this.session.recordObjectiveEvents(events ?? []);
+        });
+        this.telemetry?.recordActivation(from, tile.special, this.session.getScore() - scoreBefore,
+          result.steps.length, result.steps.flatMap(step => step.triggeredSpecials?.map(effect => effect.effectType) ?? []), 'last_chance');
+      }
+      tile = queue.next(this.board);
+    }
   }
 
   /**
@@ -157,7 +189,7 @@ export class TurnCoordinator implements ITurnCoordinator {
    * In bonus phase, a board with no legal action concludes the level with victory.
    */
   private async settleDeadlocks(): Promise<void> {
-    // Exhausted move budgets fail immediately; unused shuffles cannot buy moves.
+    // After the finale, unused shuffles still cannot buy moves.
     if (!this.session.isTargetReached() && this.session.getMovesLeft() === 0) return;
     if (this.deadlockResolver.hasPossibleMoves(this.board)) return;
 
