@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Board } from '../src/core/Board.ts';
 import { TileColor, SpecialType, MatchGroup } from '../src/core/TileTypes.ts';
 import { MatchDetector } from '../src/core/MatchDetector.ts';
@@ -11,7 +11,6 @@ import {
 } from '../src/core/matching/MatchRuleRegistry.ts';
 import { IMatchRule, MatchEvaluationContext } from '../src/core/matching/IMatchRule.ts';
 import { HUDView } from '../src/ui/HUDView.ts';
-import { ISoundService } from '../src/audio/ISoundService.ts';
 import { LevelDifficulty } from '../src/core/LevelProgression.ts';
 
 describe('Second Pass SOLID Refactoring Unit Tests', () => {
@@ -64,19 +63,7 @@ describe('Second Pass SOLID Refactoring Unit Tests', () => {
 
   describe('HUDView Separation', () => {
     it('initializes and updates HUD metrics independently without modal coupling', () => {
-      const mockSound: ISoundService = {
-        playSwap: vi.fn(),
-        playMatch: vi.fn(),
-        playSpecialLaser: vi.fn(),
-        playBombExplosion: vi.fn(),
-        playVictory: vi.fn(),
-        playShuffle: vi.fn(),
-        playAirplaneFly: vi.fn(),
-        toggleMute: vi.fn().mockReturnValue(true),
-        isMuted: vi.fn().mockReturnValue(false),
-      };
-
-      const hud = new HUDView(mockSound);
+      const hud = new HUDView();
       hud.initLevel({ level: 3, difficulty: LevelDifficulty.Hard, moves: 20, targetScore: 5000, shuffles: 3 }, 5, 12000);
       hud.updateMoves(15);
       hud.updateShuffles(2);

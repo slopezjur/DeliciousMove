@@ -12,13 +12,22 @@ export interface ITurnCoordinator {
   activateTile(pos: Position): Promise<boolean>;
 }
 
+/** Turn execution cannot restart, restore, or reconfigure the session. */
+export type ITurnSession = Pick<IGameSession,
+  'canMakeMove' | 'getSnapshot' | 'isTargetReached' | 'getScore' | 'onMoveInitiated'
+  | 'addPoints' | 'recordObjectiveEvents' | 'onTurnCompleted' | 'getMovesLeft'
+  | 'completeWithVictory' | 'consumeShuffle' | 'endWithDeadlock'>;
+
+export type ITurnTelemetry = Pick<IGameTelemetryService,
+  'recordTurnDetails' | 'recordSwap' | 'recordActivation' | 'recordShuffle'>;
+
 export interface TurnCoordinatorDependencies {
   board: Board;
   animations: IAnimationSequencer;
   cascadeResolver: ICascadeResolver;
   deadlockResolver: IDeadlockResolver;
-  session: IGameSession;
-  telemetry?: IGameTelemetryService;
+  session: ITurnSession;
+  telemetry?: ITurnTelemetry;
   getRandomSnapshot?: () => RandomSnapshot | undefined;
 }
 
@@ -33,8 +42,8 @@ export class TurnCoordinator implements ITurnCoordinator {
   private readonly animations: IAnimationSequencer;
   private readonly cascadeResolver: ICascadeResolver;
   private readonly deadlockResolver: IDeadlockResolver;
-  private readonly session: IGameSession;
-  private readonly telemetry?: IGameTelemetryService;
+  private readonly session: ITurnSession;
+  private readonly telemetry?: ITurnTelemetry;
 
   constructor(deps: TurnCoordinatorDependencies) {
     this.getRandomSnapshot = deps.getRandomSnapshot;
@@ -90,7 +99,7 @@ export class TurnCoordinator implements ITurnCoordinator {
     this.session.onMoveInitiated();
     await this.animations.playCascadeSteps(result.steps, (gained, events) => {
       this.session.addPoints(gained);
-      this.session.recordObjectiveEvents?.(events ?? []);
+      this.session.recordObjectiveEvents(events ?? []);
     });
     const scoreGained = this.session.getScore() - scoreBefore;
 
@@ -130,7 +139,7 @@ export class TurnCoordinator implements ITurnCoordinator {
     this.session.onMoveInitiated();
     await this.animations.playCascadeSteps(result.steps, (gained, events) => {
       this.session.addPoints(gained);
-      this.session.recordObjectiveEvents?.(events ?? []);
+      this.session.recordObjectiveEvents(events ?? []);
     });
     const scoreGained = this.session.getScore() - scoreBefore;
 

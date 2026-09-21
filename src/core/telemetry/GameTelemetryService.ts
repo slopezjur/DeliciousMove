@@ -14,7 +14,8 @@ const MAX_HISTORY_SIZE = 25;
 
 export interface GameTelemetryDependencies {
   board: Board;
-  session: IGameSession;
+  session: Pick<IGameSession, 'getLevelConfig' | 'getObjectives' | 'getLevel' | 'getState'
+    | 'getScore' | 'getTargetScore' | 'getMovesLeft' | 'getAccumulatedMoves' | 'getShufflesLeft'>;
   deadlockResolver: IDeadlockResolver;
   isInputLocked: () => boolean;
 }
@@ -139,7 +140,7 @@ export class GameTelemetryService implements IGameTelemetryService {
 
     return {
       timestamp: new Date().toISOString(),
-      board: board.getSnapshot(), objectives: session.getObjectives?.(), blockersOnBoard,
+      board: board.getSnapshot(), objectives: session.getObjectives(), blockersOnBoard,
       lastTurn: this.lastTurn ? structuredClone(this.lastTurn) : undefined,
       level: session.getLevel(),
       difficulty: config.difficulty,

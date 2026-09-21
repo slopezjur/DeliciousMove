@@ -1,7 +1,5 @@
 import { IHUDView } from './IHUDView.ts';
 import { LevelConfig, LevelDifficulty } from '../core/LevelProgression.ts';
-import { ISoundService } from '../audio/ISoundService.ts';
-import { SoundManager } from '../audio/SoundManager.ts';
 
 import { LanguageService } from '../i18n/LanguageService.ts';
 import { ObjectivesView } from './ObjectivesView.ts';
@@ -19,9 +17,6 @@ export class HUDView implements IHUDView {
   private difficultyBadgeEl: HTMLElement | null;
   private bonusPhaseBadgeEl: HTMLElement | null;
   private progressFill: HTMLElement | null;
-  private soundBtn: HTMLElement | null;
-
-  private soundService: ISoundService;
   private readonly objectivesView: ObjectivesView;
 
   private currentScore = 0;
@@ -32,8 +27,7 @@ export class HUDView implements IHUDView {
   private bonusActive = false;
   private animFrameId: number = 0;
 
-  constructor(soundService: ISoundService = new SoundManager(), private readonly language = new LanguageService()) {
-    this.soundService = soundService;
+  constructor(private readonly language = new LanguageService()) {
     this.objectivesView = new ObjectivesView(language);
     language.subscribe(() => this.refreshLanguage());
 
@@ -46,18 +40,10 @@ export class HUDView implements IHUDView {
     this.difficultyBadgeEl = this.findElement('difficulty-badge');
     this.bonusPhaseBadgeEl = this.findElement('bonus-phase-indicator');
     this.progressFill = this.findElement('progress-fill');
-    this.soundBtn = this.findElement('sound-toggle-btn');
     const bonusDialog = this.findElement('bonus-info-dialog') as HTMLDialogElement | null;
     this.bonusPhaseBadgeEl?.addEventListener('click', () => bonusDialog?.showModal());
     this.findElement('bonus-info-close')?.addEventListener('click', () => bonusDialog?.close());
 
-    if (this.soundBtn) {
-      this.soundBtn.addEventListener('click', () => {
-        this.soundService.toggleMute();
-        this.renderSound();
-      });
-      this.renderSound();
-    }
   }
 
   public initLevel(config: LevelConfig, bonusMoves: number = 0, globalScore: number = 0): void {
@@ -142,7 +128,6 @@ export class HUDView implements IHUDView {
 
   private refreshLanguage(): void {
     this.showBonus(this.bonusActive);
-    this.renderSound();
     this.setText(this.difficultyBadgeEl, this.language.t(this.difficulty));
     this.setText(this.scoreEl, this.displayedScore.toLocaleString(this.language.locale));
     this.setText(this.globalScoreEl, this.globalScore.toLocaleString(this.language.locale));
@@ -164,14 +149,6 @@ export class HUDView implements IHUDView {
       }
     };
     this.animFrameId = requestAnimationFrame(step);
-  }
-
-  private renderSound(): void {
-    if (!this.soundBtn) return;
-    const enabled = !this.soundService.isMuted();
-    this.soundBtn.textContent = this.language.t(enabled ? 'soundOn' : 'soundOff');
-    this.soundBtn.setAttribute('aria-pressed', String(enabled));
-    this.soundBtn.setAttribute('aria-label', this.language.t('soundTip'));
   }
 
   private setText(element: HTMLElement | null, value: string): void {

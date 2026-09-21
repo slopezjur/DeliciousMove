@@ -45,6 +45,13 @@ advance regeneration. Failure is recorded once for the current attempt; retry cl
 its failure marker without charging. The checkpoint identity is its timestamp and level
 (or `new` before the first victory). Only a matching attempt ledger can resume that run.
 Bank spending is persisted immediately, independently of the completed-level checkpoint.
+Starting or retrying an attempt reconciles the session with the ledger's lower bank
+balance, including spending recorded by another tab. Reconciliation cannot grant moves
+or alter base moves; retry still discards failed-attempt score and resets its shuffles.
+Supported legacy non-victory saves reconcile against their own level's attempt, not
+the next level. Their restored board/progress stays intact, but spent bank moves and
+recorded failures are not refunded. This compatibility path does not enable new
+mid-level saves. Tabs do not synchronize live boards; this is not transactional cloud sync.
 New Game clears the attempt, not the lives or regeneration deadline. This is local
 convenience storage, not a server-authoritative anti-cheat system.
 
@@ -68,7 +75,7 @@ configuration/counters, and the mulberry32 random-generator state. Snapshots are
 independent copies, not references to mutable game objects.
 
 `Board`, `GameSession`, and `IStatefulRandomSource` export/restore domain snapshots.
-`SaveCodec` validates and migrates them. `SaveStore` handles browser storage,
+`SaveCodec` validates and migrates them through the `ISaveCodec` contract. `SaveStore` handles browser storage,
 checkpoint policy and preservation. `Game` saves only after completed turn playback
 and reconstructs presentation without triggering level initialization on restore.
 

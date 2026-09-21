@@ -34,6 +34,19 @@ function fixture(): GameSave {
 }
 
 describe('versioned saves', () => {
+  it('allows a codec substitute without requiring migration internals', () => {
+    const storage = new MemoryStorage(), save = fixture();
+    save.session.state = GameState.Victory;
+    const decoded: string[] = [];
+    const store = new SaveStore(storage, {
+      encode: () => 'encoded checkpoint',
+      decode: raw => { decoded.push(raw); return save; },
+    });
+    expect(store.save(save)).toBe(true);
+    expect(store.load()).toBe(save);
+    expect(decoded).toEqual(['encoded checkpoint']);
+    expect(storage.getItem(SAVE_KEY)).toBe('encoded checkpoint');
+  });
   it.each([[30, 17, 13, 17], [10, 17, 0, 10], [0, 17, 0, 0]])(
     'migrates legacy total %i and initial bank %i without adding moves', (total, bank, baseLeft, bankLeft) => {
       const legacy = fixture(); legacy.schemaVersion = 2; legacy.rulesVersion = 3;

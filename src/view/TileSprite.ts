@@ -1,8 +1,9 @@
 import { Container, Graphics } from 'pixi.js';
 import { TileData } from '../core/TileTypes.ts';
 import { FeatureAssets } from './FeatureAssets.ts';
+import { ITileVisual } from './ITileVisual.ts';
 
-export class TileSprite extends Container {
+export class TileSprite extends Container implements ITileVisual {
   public tileData: TileData;
   public readonly graphic: Graphics;
   private selectionBorder: Graphics;

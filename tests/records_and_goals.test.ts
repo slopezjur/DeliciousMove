@@ -83,7 +83,7 @@ describe('combined goals and bonus state', () => {
         toggle: (s: string, force: boolean) => force ? classes.add(s) : classes.delete(s), contains: (s: string) => classes.has(s) } }; };
     const banner = makeElement();
     vi.stubGlobal('document', { getElementById: (id: string) => id === 'bonus-phase-indicator' ? banner : null });
-    const language = new LanguageService(), hud = new HUDView(new SoundManager(), language);
+    const language = new LanguageService(), hud = new HUDView(language);
     const session = new GameSession(undefined, 3); hud.initLevel(session.getLevelConfig());
     session.addPoints(99999); hud.addScore(99999); hud.updateObjectives(session.getObjectives());
     expect(banner.classList.contains('hidden')).toBe(true);

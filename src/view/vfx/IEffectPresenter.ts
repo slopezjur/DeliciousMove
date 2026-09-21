@@ -3,8 +3,9 @@ import { ISoundService } from '../../audio/ISoundService.ts';
 import { IBoardViewAnimator } from '../IBoardViewContracts.ts';
 
 export interface EffectPresentationContext {
-  boardView: IBoardViewAnimator;
-  sound: ISoundService;
+  boardView: Pick<IBoardViewAnimator,
+    'tileSize' | 'boardPixelWidth' | 'boardPixelHeight' | 'vfx' | 'getTileSprite' | 'gridToLocal' | 'screenShake'>;
+  sound: Pick<ISoundService, 'playSpecialLaser' | 'playBombExplosion' | 'playAirplaneFly'>;
   /** Local pixel position of the tile that triggered the effect. */
   position: { x: number; y: number };
 }

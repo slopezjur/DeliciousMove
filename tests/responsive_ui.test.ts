@@ -3,9 +3,8 @@ import { calculateBoardLayout } from '../src/view/BoardLayout.ts';
 import { BoardView } from '../src/view/BoardView.ts';
 import { Board } from '../src/core/Board.ts';
 import { SettingsView } from '../src/ui/SettingsView.ts';
-import { HUDView } from '../src/ui/HUDView.ts';
+import { SoundControlsView } from '../src/ui/SoundControlsView.ts';
 import { LanguageService } from '../src/i18n/LanguageService.ts';
-import { SoundManager } from '../src/audio/SoundManager.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -85,7 +84,8 @@ describe('settings controls', () => {
     const button = { textContent: '', setAttribute: vi.fn(), addEventListener: (_: string, handler: () => void) => { click = handler; } };
     vi.stubGlobal('document', { getElementById: (id: string) => id === 'sound-toggle-btn' ? button : null });
     const language = new LanguageService();
-    new HUDView(new SoundManager(), language);
+    let muted = false;
+    new SoundControlsView({ isMuted: () => muted, toggleMute: () => (muted = !muted) }, language);
     expect(button.textContent).toBe('On');
     click();
     expect(button.textContent).toBe('Off');

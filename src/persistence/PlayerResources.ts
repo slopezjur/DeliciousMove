@@ -39,12 +39,13 @@ export class PlayerResources {
     return this.data.attempt?.checkpoint === checkpoint ? { ...this.data.attempt } : undefined;
   }
 
-  beginAttempt(checkpoint: string, level: number, bank: number): void {
+  beginAttempt(checkpoint: string, level: number, bank: number): number {
     this.refresh();
     const old = this.data.attempt;
     if (old?.checkpoint === checkpoint && old.level === level) bank = Math.min(bank, old.bank);
     this.data.attempt = { checkpoint, level, bank };
     this.persist();
+    return bank;
   }
 
   spendBank(checkpoint: string, level: number, bank: number): void {

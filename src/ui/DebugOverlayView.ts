@@ -1,5 +1,5 @@
 import { LanguageService } from '../i18n/LanguageService.ts';
-import { IGameTelemetryService } from '../core/telemetry/IGameTelemetry.ts';
+import { IGameTelemetryReader } from '../core/telemetry/IGameTelemetry.ts';
 import { IDebugOverlayView } from './IDebugOverlayView.ts';
 import { IClipboardService } from './IClipboardService.ts';
 import { BrowserClipboardService } from './ClipboardService.ts';
@@ -11,7 +11,7 @@ export interface DebugOverlayCallbacks {
 }
 
 export class DebugOverlayView implements IDebugOverlayView {
-  private readonly telemetry: IGameTelemetryService;
+  private readonly telemetry: IGameTelemetryReader;
   private readonly callbacks: DebugOverlayCallbacks;
   private readonly clipboardService: IClipboardService;
 
@@ -21,7 +21,7 @@ export class DebugOverlayView implements IDebugOverlayView {
   private isOpen = false;
 
   constructor(
-    telemetry: IGameTelemetryService,
+    telemetry: IGameTelemetryReader,
     callbacks: DebugOverlayCallbacks,
     clipboardService: IClipboardService = new BrowserClipboardService(),
     private readonly language = new LanguageService()

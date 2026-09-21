@@ -1,5 +1,5 @@
 import { LanguageService } from '../i18n/LanguageService.ts';
-import { IGameTelemetryService, TelemetryMoveRecord, TelemetryStateSnapshot } from '../core/telemetry/IGameTelemetry.ts';
+import { IGameTelemetryReader, TelemetryMoveRecord, TelemetryStateSnapshot } from '../core/telemetry/IGameTelemetry.ts';
 import { DebugOverlayView, DebugOverlayCallbacks } from '../ui/DebugOverlayView.ts';
 import { IDebugOverlayView } from '../ui/IDebugOverlayView.ts';
 import { IClipboardService } from '../ui/IClipboardService.ts';
@@ -23,7 +23,7 @@ export class GameDebugController {
   private readonly overlay?: IDebugOverlayView;
 
   constructor(
-    telemetry: IGameTelemetryService,
+    telemetry: IGameTelemetryReader,
     actions: DebugOverlayCallbacks,
     clipboard: IClipboardService,
     overlay?: IDebugOverlayView,

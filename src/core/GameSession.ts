@@ -60,10 +60,11 @@ export interface SessionSaveState {
 
 export interface IGameSession {
   getLevelMovesLeft(): number;
+  reconcileBank(remainingBank: number): void;
   retryLevel(): void;
   failAttempt(reason: GameOverReason): GameState;
-  recordObjectiveEvents?(events: readonly ObjectiveEvent[]): void;
-  getObjectives?(): ObjectiveProgress[];
+  recordObjectiveEvents(events: readonly ObjectiveEvent[]): void;
+  getObjectives(): ObjectiveProgress[];
   exportState(): SessionSaveState;
   restore(saved: SessionSaveState): void;
   addListener(listener: GameSessionListener): () => void;
@@ -222,6 +223,16 @@ export class GameSession implements IGameSession {
   }
 
   public getLevelMovesLeft(): number { return this.levelMovesLeft; }
+
+  /** Reconcile persisted spending without ever granting moves or changing base moves. */
+  public reconcileBank(remainingBank: number): void {
+    if (!Number.isSafeInteger(remainingBank) || remainingBank < 0) throw new RangeError('Invalid bank balance.');
+    const bank = Math.min(this.accumulatedMoves, remainingBank);
+    if (bank === this.accumulatedMoves) return;
+    this.accumulatedMoves = bank;
+    this.movesLeft = this.levelMovesLeft + bank;
+    this.notifyMoves();
+  }
 
   /** Failed-attempt points never inflate the run score; spent bank moves stay spent. */
   public retryLevel(): void {

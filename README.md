@@ -263,20 +263,30 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
   an existing specific handler.
 - `GameSession` and `ILevelProgression`: score, moves, phase state, and level configuration.
 - `TurnCoordinator`: coordinates turns through `IAnimationSequencer`, passing tile IDs
-  and positions. It does not depend on Pixi sprites or board-view internals.
+  and positions. Its `ITurnSession` and `ITurnTelemetry` ports exclude run lifecycle,
+  persistence, and diagnostic-reading operations. Objective reporting is required,
+  so replacement sessions cannot silently discard objective events.
 - `IdleHintController`: requests hints through the separate `IHintAnimator` contract.
 - `AnimationQueue`, `BoardView`, and effect presenters: sprite lookup and visual playback.
   The board exposes a typed `displayObject` for mounting into the Pixi stage.
+  Animations use structural `ITileVisual` objects, not concrete `TileSprite` containers
+  or the domain board. Effect presenters receive only effect-related board/audio methods.
   Cascade payloads are independent step-local snapshots; sprites own their presentation
   data. Playback cannot move domain tiles or mutate earlier/later cascade events.
 - `SoundManager`: instance-owned audio context and mute state. `Game` explicitly shares
-  one service across the HUD, modal, and animations; independent games can use separate services.
+  one service across settings, modal, and animations; independent games can use separate services.
+  `SoundControlsView` owns the localized mute toggle through a two-method preferences
+  port; `HUDView` owns gameplay metrics, not sound settings.
 - `GameTelemetryService`: diagnostic history and snapshots. Input lock state arrives
   through a read-only callback, without importing input-controller code.
-- `GameDebugController`: optional overlay and browser debug API.
+- `GameDebugController`: optional overlay and browser debug API. Both diagnostic views
+  depend on `IGameTelemetryReader`, without requiring recording methods.
 - `LanguageService` / `LanguageControls`: typed EN/ES dictionaries, preferences and DOM controls.
 - `ObjectivesView`, `TerrainView`, `FeatureAssets`: responsive counters and resolution-independent board markings.
 - `SaveCodec` / `SaveStore`: validated, versioned checkpoints and browser-storage policy.
+  The store accepts `ISaveCodec`; migration internals are not part of its dependency.
+- `SaveStatusView`: localized checkpoint indicators and warnings; receives status values
+  without reading or writing storage. `RecordsView` depends only on `IRecordsReader`.
 - `Game`: constructs and connects these services, binds session events, and handles layout.
 
 Inject `IRandomSource` for core random decisions, for example

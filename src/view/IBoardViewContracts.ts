@@ -1,7 +1,6 @@
 import { FederatedPointerEvent, ContainerChild } from 'pixi.js';
-import { Board } from '../core/Board.ts';
 import { Position, TileData } from '../core/TileTypes.ts';
-import { TileSprite } from './TileSprite.ts';
+import { ITileVisual } from './ITileVisual.ts';
 import { IVFXManager } from './VFXManager.ts';
 
 export type PointerEventHandler = (event: FederatedPointerEvent) => void;
@@ -38,16 +37,15 @@ export type IBoardInputSurface = IBoardCoordinateMapper & IPointerEventSource;
  * Animation contract required by animation sequence managers (ISP).
  */
 export interface IBoardViewAnimator {
-  readonly board: Board;
   readonly tileSize: number;
   readonly boardPixelWidth: number;
   readonly boardPixelHeight: number;
   readonly vfx: IVFXManager;
   gridToLocal(row: number, col: number): { x: number; y: number };
-  getTileSprite(id: number): TileSprite | undefined;
-  addTileSprite(tile: TileData): TileSprite;
+  getTileSprite(id: number): ITileVisual | undefined;
+  addTileSprite(tile: TileData): ITileVisual;
   removeTileSprite(id: number): void;
-  getTileSpritesMap(): Map<number, TileSprite>;
+  getTileSpritesMap(): ReadonlyMap<number, ITileVisual>;
   screenShake(intensity?: number): void;
   syncSpritesWithBoard(): void;
   applyTerrainSnapshot?(cells: import('../core/BoardFeatures.ts').CellState[]): void;

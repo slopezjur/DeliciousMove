@@ -8,7 +8,6 @@ import { SpecialRegistry } from '../src/core/specials/SpecialRegistry.ts';
 import { ISpecialComboHandler } from '../src/core/specials/ISpecialHandler.ts';
 import { SoundManager } from '../src/audio/SoundManager.ts';
 import { GameDebugController } from '../src/debug/GameDebugController.ts';
-import { IGameTelemetryService } from '../src/core/telemetry/IGameTelemetry.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -88,7 +87,7 @@ describe('Extensible policies and isolated dependencies', () => {
       getRecentMoves: vi.fn().mockReturnValue([]),
       getSnapshot: vi.fn(),
       exportDiagnosticJson: () => '{"level":1}',
-    } as unknown as IGameTelemetryService;
+    };
     const actions = { onUnlockInput: vi.fn(), onForceShuffle: vi.fn() };
     const clipboard = { copyText: vi.fn().mockResolvedValue(true) };
     new GameDebugController(telemetry, actions, clipboard);

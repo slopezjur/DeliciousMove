@@ -38,7 +38,7 @@ it('disables retry at zero, updates the countdown and enables retry after regene
 
 it('separates and highlights bank moves and opens bonus help without changing hint visibility', () => {
   const el = dom(['moves-value', 'bank-moves-value', 'bank-moves', 'bonus-phase-indicator', 'bonus-info-dialog', 'bonus-info-close', 'level-feature-hint']);
-  const hud = new HUDView(new SoundManager());
+  const hud = new HUDView();
   hud.updateMoves(3, false, 0, 3);
   expect(el('moves-value').textContent).toBe('0');
   expect(el('bank-moves-value').textContent).toBe('3');

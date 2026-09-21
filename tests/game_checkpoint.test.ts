@@ -9,6 +9,8 @@ import { BoardView } from '../src/view/BoardView.ts';
 import { SAVE_KEY } from '../src/persistence/SaveStore.ts';
 import { RECORDS_KEY } from '../src/persistence/RecordsStore.ts';
 import { Position } from '../src/core/TileTypes.ts';
+import { BoardInitializer } from '../src/core/BoardInitializer.ts';
+import { GameSave, SaveCodec, SAVE_SCHEMA_VERSION, GAME_RULES_VERSION } from '../src/persistence/SaveCodec.ts';
 
 const captured = vi.hoisted(() => ({
   swap: undefined as undefined | ((from: Position, to: Position) => Promise<boolean>),
@@ -53,7 +55,81 @@ function environment() {
   return { data, storage, app, hud, modal, idleHintController, container };
 }
 
+function saveFixture(session: GameSession): GameSave {
+  const board = new Board(), random = new SeededRandomSource(20);
+  new BoardInitializer(random).populate(board);
+  return {
+    schemaVersion: SAVE_SCHEMA_VERSION, rulesVersion: GAME_RULES_VERSION,
+    savedAt: '2026-09-20T12:00:00.000Z', board: board.getSnapshot(),
+    session: session.exportState(), random: random.getSnapshot(),
+  };
+}
+
 describe('game checkpoint lifecycle', () => {
+  it.each([false, true])('reconciles accepted mid-level saves without refunding bank or losing failure (failed=%s)', async failed => {
+    const env = environment(), original = new GameSession();
+    original.startLevel(1, 3);
+    original.addPoints(100);
+    const save = saveFixture(original);
+    const raw = new SaveCodec().encode(save);
+    env.storage.setItem(SAVE_KEY, raw);
+    const checkpoint = `${save.savedAt}:1`;
+    const resources = new PlayerResources(env.storage);
+    resources.beginAttempt(checkpoint, 1, 3);
+    resources.spendBank(checkpoint, 1, 2);
+    if (failed) resources.fail(checkpoint, 1, 2, GameOverReason.Deadlock);
+    const session = new GameSession(), board = new Board(), view = new BoardView(board);
+    const game = new Game({ ...env, session, board, boardView: view, random: new SeededRandomSource(9) });
+    try {
+      await game.init(env.container);
+      expect(session.getState()).toBe(failed ? GameState.GameOver : GameState.Ready);
+      expect(session.getAccumulatedMoves()).toBe(2);
+      expect(session.getMovesLeft()).toBe(session.getLevelMovesLeft() + 2);
+      expect(resources.getAttempt(checkpoint)?.failed).toBe(failed ? GameOverReason.Deadlock : undefined);
+      expect(resources.snapshot().lives).toBe(failed ? 4 : 5);
+      expect(board.getSnapshot()).toEqual(save.board);
+      expect(session.getScore()).toBe(100);
+      if (failed) {
+        (game as unknown as { onModalAction(): void }).onModalAction();
+        expect(session.getSnapshot()).toMatchObject({ score: 0, globalScore: 0, accumulatedMoves: 2 });
+        expect(resources.snapshot().lives).toBe(4);
+      }
+      expect(env.storage.getItem(SAVE_KEY)).toBe(raw);
+    } finally { view.destroy({ children: true }); }
+  });
+
+  it('uses the persisted bank on retry when another tab has spent moves', async () => {
+    const env = environment(), won = new GameSession();
+    won.onMoveInitiated(); won.addPoints(won.getTargetScore()); won.completeWithVictory();
+    const save = saveFixture(won);
+    env.storage.setItem(SAVE_KEY, new SaveCodec().encode(save));
+    const boardA = new Board(), viewA = new BoardView(boardA), sessionA = new GameSession();
+    const boardB = new Board(), viewB = new BoardView(boardB), sessionB = new GameSession();
+    const a = new Game({ ...env, board: boardA, boardView: viewA, session: sessionA });
+    const b = new Game({ ...env, board: boardB, boardView: viewB, session: sessionB });
+    try {
+      await a.init(env.container);
+      (a as unknown as { onModalAction(): void }).onModalAction();
+      await b.init(env.container);
+      expect(sessionB.getAccumulatedMoves()).toBe(21);
+      for (let i = 0; i < sessionA.getLevelConfig().moves + 1; i++) {
+        sessionA.onMoveInitiated(); sessionA.onTurnCompleted();
+      }
+      sessionB.addPoints(100);
+      sessionB.failAttempt(GameOverReason.Deadlock);
+      (b as unknown as { onModalAction(): void }).onModalAction();
+      expect(sessionB.getSnapshot()).toMatchObject({
+        level: 2, accumulatedMoves: 20, levelMovesLeft: sessionB.getLevelConfig().moves,
+        score: 0, globalScore: save.session.globalScore, shufflesLeft: sessionB.getLevelConfig().shuffles,
+      });
+      expect(sessionB.getMovesLeft()).toBe(sessionB.getLevelMovesLeft() + 20);
+      const resources = new PlayerResources(env.storage);
+      expect(resources.snapshot().lives).toBe(4);
+      expect(resources.getAttempt(`${save.savedAt}:1`)).toMatchObject({ bank: 20 });
+      expect(resources.getAttempt(`${save.savedAt}:1`)?.failed).toBeUndefined();
+    } finally { viewA.destroy({ children: true }); viewB.destroy({ children: true }); }
+  });
+
   it('charges once per failure, gates zero lives, keeps lives on New Game, and resumes after regeneration', async () => {
     const env = environment(), board = new Board(), view = new BoardView(board), session = new GameSession();
     let now = 1000000;

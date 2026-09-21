@@ -67,3 +67,6 @@ export interface IGameTelemetryService {
   getSnapshot(): TelemetryStateSnapshot;
   exportDiagnosticJson(): string;
 }
+
+export type IGameTelemetryReader = Pick<IGameTelemetryService,
+  'getRecentMoves' | 'getSnapshot' | 'exportDiagnosticJson'>;

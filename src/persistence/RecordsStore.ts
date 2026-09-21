@@ -5,8 +5,13 @@ export const RECORDS_KEY = 'deliciousmove.records';
 export interface PersonalRecords { bestLevel: number; bestScore: number }
 export type RecordsStatus = 'available' | 'unavailable' | 'preserved';
 
+export interface IRecordsReader {
+  readonly status: RecordsStatus;
+  getSnapshot(): PersonalRecords;
+}
+
 /** Separate lifetime records from the replaceable run checkpoint. Never writes mid-level. */
-export class RecordsStore {
+export class RecordsStore implements IRecordsReader {
   private records: PersonalRecords = { bestLevel: 0, bestScore: 0 };
   public status: RecordsStatus = 'available';
 

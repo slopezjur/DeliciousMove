@@ -16,6 +16,11 @@ export interface GameSave {
   random: RandomSnapshot;
 }
 
+export interface ISaveCodec {
+  encode(save: GameSave): string;
+  decode(raw: string): GameSave;
+}
+
 export type SaveMigration = (input: Record<string, unknown>) => Record<string, unknown>;
 export type MigrationRegistry = ReadonlyMap<number, SaveMigration>;
 
@@ -62,7 +67,7 @@ const RULES_MIGRATIONS: MigrationRegistry = new Map([
 ]);
 
 /** Migrations are pure, sequential transforms. Missing upgrade paths preserve the original save. */
-export class SaveCodec {
+export class SaveCodec implements ISaveCodec {
   constructor(
     private readonly schemaMigrations: MigrationRegistry = SCHEMA_MIGRATIONS,
     private readonly rulesMigrations: MigrationRegistry = RULES_MIGRATIONS,

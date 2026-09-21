@@ -1,6 +1,6 @@
 import { GameState } from '../core/GameSession.ts';
 import { IStorage } from './Storage.ts';
-import { GameSave, SaveCodec, SaveError } from './SaveCodec.ts';
+import { GameSave, ISaveCodec, SaveCodec, SaveError } from './SaveCodec.ts';
 
 export const SAVE_KEY = 'deliciousmove.save';
 export const BACKUP_KEY = 'deliciousmove.save.backup';
@@ -10,7 +10,7 @@ export class SaveStore {
   public status: SaveStatus = 'none';
   private blocked = false;
 
-  constructor(private readonly storage: IStorage, private readonly codec = new SaveCodec()) {}
+  constructor(private readonly storage: IStorage, private readonly codec: ISaveCodec = new SaveCodec()) {}
 
   public load(): GameSave | null {
     try {

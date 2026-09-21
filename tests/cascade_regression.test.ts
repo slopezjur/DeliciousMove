@@ -302,7 +302,6 @@ describe('Cascade regressions', () => {
       const syncMock = vi.fn();
       const removeMock = vi.fn();
       const fakeBoardView: IBoardViewAnimator = {
-        board,
         tileSize: 64,
         boardPixelWidth: 512,
         boardPixelHeight: 512,
