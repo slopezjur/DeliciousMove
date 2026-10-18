@@ -1,6 +1,7 @@
 import { Board } from './Board.ts';
 import { LevelFeatures, Objective } from './BoardFeatures.ts';
 import { SpecialType, TileColor } from './TileTypes.ts';
+import { BoardMechanicsResolver, type IBoardMechanicsResolver } from './BoardMechanics.ts';
 
 /** Small authored families repeat with different colors/shapes, not unbounded blocker counts. */
 export function getLevelFeatures(level: number): { features?: LevelFeatures; objectives?: Objective[] } {
@@ -54,6 +55,8 @@ export function getLevelFeatures(level: number): { features?: LevelFeatures; obj
 
 /** Applies topology before population, then places authored objects on the filled board. */
 export class LevelBoardSetup {
+  constructor(private readonly mechanics: Pick<IBoardMechanicsResolver, 'refresh'> = new BoardMechanicsResolver()) {}
+
   public configure(board: Board, features?: LevelFeatures): void {
     board.resetTerrain();
     if (!features) return;
@@ -66,9 +69,17 @@ export class LevelBoardSetup {
     }
     for (const p of features.jelly) if (board.isValidPosition(p.row, p.col)) board.getCell(p.row, p.col)!.jelly = 1;
     for (const p of features.ice) if (board.isValidPosition(p.row, p.col)) board.getCell(p.row, p.col)!.ice = p.layers;
+    for (const belt of features.conveyors ?? []) belt.forEach((p, i) => {
+      board.getCell(p.row, p.col)!.conveyorTo = { ...belt[(i + 1) % belt.length] };
+    });
+    for (const portal of features.portals ?? []) {
+      board.getCell(portal.entrance.row, portal.entrance.col)!.portalTo = { ...portal.exit };
+    }
+    if (features.boss || features.conveyors?.length) board.mechanics = { turns: 0,
+      ...(features.boss ? { boss: structuredClone(features.boss) } : {}) };
     if (features.ingredients.length > 0) {
       for (const cell of board.getCells()) {
-        if (cell.playable && !board.isValidPosition(cell.row + 1, cell.col)) board.getCell(cell.row, cell.col)!.exit = true;
+        if (cell.playable && !cell.portalTo && !board.isValidPosition(cell.row + 1, cell.col)) board.getCell(cell.row, cell.col)!.exit = true;
       }
     }
   }
@@ -87,8 +98,17 @@ export class LevelBoardSetup {
       tile.special = SpecialType.None;
       // Every uninterrupted gravity segment has an exit; no ingredient is born stranded.
       let row = p.row;
-      while (board.isValidPosition(row + 1, p.col)) row++;
-      if (!board.getCell(row, p.col)?.exit) throw new Error('Ingredient source has no exit.');
+      let col = p.col;
+      const visited = new Set<string>();
+      while (!visited.has(`${row},${col}`)) {
+        visited.add(`${row},${col}`);
+        const cell = board.getCell(row, col)!;
+        if (cell.portalTo) { row = cell.portalTo.row; col = cell.portalTo.col; }
+        else if (board.isValidPosition(row + 1, col)) row++;
+        else break;
+      }
+      if (!board.getCell(row, col)?.exit) throw new Error('Ingredient source has no exit.');
     }
+    this.mechanics.refresh(board);
   }
 }

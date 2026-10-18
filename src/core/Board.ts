@@ -1,5 +1,6 @@
 import { TileColor, SpecialType, Position, TileData } from './TileTypes.ts';
 import { CellState, isBlocker, isCandy } from './BoardFeatures.ts';
+import type { BoardMechanicsState } from './BoardMechanics.ts';
 
 export interface BoardSnapshot {
   rows: number;
@@ -7,6 +8,7 @@ export interface BoardSnapshot {
   nextId: number;
   tiles: TileData[];
   cells?: CellState[];
+  mechanics?: BoardMechanicsState;
 }
 
 export class Board {
@@ -15,6 +17,7 @@ export class Board {
   private grid: (TileData | null)[][];
   private nextId: number = 1;
   private cells: CellState[][];
+  public mechanics?: BoardMechanicsState;
 
   constructor(rows = 8, cols = 8) {
     this.rows = rows;
@@ -28,11 +31,12 @@ export class Board {
       ({ row, col, playable: true, jelly: 0, ice: 0, exit: false })));
   }
 
-  public resetTerrain(): void { this.clear(); this.cells = this.defaultCells(); }
+  public resetTerrain(): void { this.clear(); this.cells = this.defaultCells(); this.mechanics = undefined; }
   public getCell(row: number, col: number): CellState | undefined { return this.cells[row]?.[col]; }
-  public getCells(): CellState[] { return this.cells.flat().map(cell => ({ ...cell })); }
+  public getCells(): CellState[] { return structuredClone(this.cells.flat()); }
   public hasTerrain(): boolean {
-    return this.cells.some(row => row.some(cell => !cell.playable || cell.jelly > 0 || cell.ice > 0 || cell.exit));
+    return this.cells.some(row => row.some(cell => !cell.playable || cell.jelly > 0 || cell.ice > 0 || cell.exit
+      || cell.conveyorTo || cell.portalTo || cell.bossShielded !== undefined));
   }
   public canSwap(pos: Position): boolean {
     const tile = this.get(pos.row, pos.col);
@@ -101,7 +105,8 @@ export class Board {
     const tiles: TileData[] = [];
     this.forEachTile((tile, row, col) => tiles.push({ ...tile, row, col }));
     return { rows: this.rows, cols: this.cols, nextId: this.nextId, tiles,
-      ...(this.hasTerrain() ? { cells: this.getCells() } : {}) };
+      ...(this.hasTerrain() ? { cells: this.getCells() } : {}),
+      ...(this.mechanics ? { mechanics: structuredClone(this.mechanics) } : {}) };
   }
 
   /** The persistence boundary validates the snapshot before restoring it. */
@@ -110,14 +115,16 @@ export class Board {
       throw new Error('Saved board dimensions do not match.');
     }
     this.resetTerrain();
-    for (const cell of snapshot.cells ?? []) this.cells[cell.row][cell.col] = { ...cell };
+    for (const cell of snapshot.cells ?? []) this.cells[cell.row][cell.col] = structuredClone(cell);
+    this.mechanics = snapshot.mechanics ? structuredClone(snapshot.mechanics) : undefined;
     for (const tile of snapshot.tiles) this.set(tile.row, tile.col, { ...tile });
     this.nextId = snapshot.nextId;
   }
 
   public clone(): Board {
     const cloned = new Board(this.rows, this.cols);
-    cloned.cells = this.cells.map(row => row.map(cell => ({ ...cell })));
+    cloned.cells = structuredClone(this.cells);
+    cloned.mechanics = this.mechanics ? structuredClone(this.mechanics) : undefined;
     cloned.nextId = this.nextId;
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {

@@ -1,7 +1,7 @@
 import type { ILocalization } from '../i18n/ILanguageService.ts';
-import { ISoundService } from '../audio/ISoundService.ts';
+import type { ISoundPreferences } from '../audio/ISoundService.ts';
 
-export type SoundPreferences = Pick<ISoundService, 'toggleMute' | 'isMuted'>;
+export type SoundPreferences = ISoundPreferences;
 
 /** Owns the settings toggle independently of gameplay metrics and audio playback. */
 export class SoundControlsView {

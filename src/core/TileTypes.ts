@@ -56,6 +56,8 @@ export interface DropMovement {
   fromRow: number;
   toRow: number;
   col: number;
+  fromCol?: number;
+  teleport?: boolean;
 }
 
 export interface SpawnData {
@@ -75,6 +77,7 @@ export interface SpecialEvolution {
 import { SpecialTriggerEffect } from './specials/ISpecialHandler.ts';
 
 export interface CascadeStep {
+  transports?: { id: number; from: Position; to: Position }[];
   objectiveEvents?: import('./BoardFeatures.ts').ObjectiveEvent[];
   cellsAfter?: import('./BoardFeatures.ts').CellState[];
   updatedTiles?: TileData[];

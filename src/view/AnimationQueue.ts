@@ -5,7 +5,7 @@ import { reducedMotion } from './MotionPreference.ts';
 import { IBoardViewAnimator } from './IBoardViewContracts.ts';
 import { IAnimationSequencer, IHintAnimator } from './IAnimationSequencer.ts';
 import { CascadeStep, Position } from '../core/TileTypes.ts';
-import { ISoundService } from '../audio/ISoundService.ts';
+import type { ISoundEffects } from '../audio/ISoundService.ts';
 import { SoundManager } from '../audio/SoundManager.ts';
 import { IEffectPlayback } from './vfx/IEffectPresenter.ts';
 import { EffectPresenterRegistry } from './vfx/EffectPresenterRegistry.ts';
@@ -15,14 +15,16 @@ import { LanguageService, MessageKey } from '../i18n/LanguageService.ts';
 const COMBO_PRAISE_THRESHOLD = 4;
 const COMBO_PRAISES: MessageKey[] = ['delicious', 'tasty', 'sugarCrush', 'sweet'];
 
+type AnimationSounds = Pick<ISoundEffects, 'playSwap' | 'playMatch' | 'playSpecialLaser' | 'playBombExplosion' | 'playShuffle' | 'playAirplaneFly'>;
+
 export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
   private boardView: IBoardViewAnimator;
-  private soundService: ISoundService;
+  private soundService: AnimationSounds;
   private effectPresenters: IEffectPlayback;
 
   constructor(
     boardView: IBoardViewAnimator,
-    soundService: ISoundService = new SoundManager(),
+    soundService: AnimationSounds = new SoundManager(),
     effectPresenters: IEffectPlayback = new EffectPresenterRegistry(),
     private readonly language: ITranslator = new LanguageService()
   ) {
@@ -82,6 +84,11 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
 
     for (const step of steps) {
       onScoreGained(step.scoreGained, step.objectiveEvents);
+      if (step.transports) {
+        await this.animateTransports(step.transports);
+        if (step.cellsAfter) this.boardView.applyTerrainSnapshot(step.cellsAfter);
+        continue;
+      }
 
       // 1. Delegate each special detonation to its registered presenter and await impact (OCP)
       for (const spec of step.triggeredSpecials ?? []) {
@@ -245,7 +252,7 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
             gsap.killTweensOf(sprite);
             gsap.killTweensOf(sprite.scale);
 
-            const fromPos = this.boardView.gridToLocal(drop.fromRow, drop.col);
+            const fromPos = this.boardView.gridToLocal(drop.fromRow, drop.fromCol ?? drop.col);
             const targetPos = this.boardView.gridToLocal(drop.toRow, drop.col);
             const distance = drop.toRow - drop.fromRow;
             const fallDuration = Math.max(0.08, distance * CELL_FALL_TIME);
@@ -259,7 +266,12 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
             sprite.tileData.col = drop.col;
             sprite.zIndex = drop.toRow;
 
-            tl.to(
+            if (drop.teleport) {
+              const duration = reducedMotion() ? 0 : .12;
+              tl.to(sprite, { alpha: 0, duration }, 0)
+                .set(sprite, { x: targetPos.x, y: targetPos.y }, duration)
+                .to(sprite, { alpha: 1, duration }, duration);
+            } else tl.to(
               sprite,
               {
                 y: targetPos.y,
@@ -511,6 +523,25 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
         .to(sprite, { x: startX - 3, rotation: -0.02, duration: 0.04, ease: 'power1.inOut' })
         .to(sprite, { x: startX + 3, rotation: 0.02, duration: 0.04, ease: 'power1.inOut' })
         .to(sprite, { x: startX, rotation: 0, duration: 0.04, ease: 'power1.out' });
+    });
+  }
+
+  /** Transport playback precedes any matches created by the moving belt. */
+  private async animateTransports(movements: NonNullable<CascadeStep['transports']>): Promise<void> {
+    const sprites = movements.flatMap(move => {
+      const sprite = this.boardView.getTileSprite(move.id);
+      return sprite ? [{ sprite, move }] : [];
+    });
+    if (!sprites.length) return;
+    await new Promise<void>(resolve => {
+      const timeline = gsap.timeline({ onComplete: resolve });
+      for (const { sprite, move } of sprites) {
+        gsap.killTweensOf(sprite); gsap.killTweensOf(sprite.scale);
+        sprite.scale.set(1); sprite.alpha = 1;
+        sprite.tileData.row = move.to.row; sprite.tileData.col = move.to.col; sprite.zIndex = move.to.row;
+        const position = this.boardView.gridToLocal(move.to.row, move.to.col);
+        timeline.to(sprite, { ...position, duration: reducedMotion() ? .01 : .24, ease: 'power1.inOut' }, 0);
+      }
     });
   }
 

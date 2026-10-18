@@ -37,9 +37,12 @@ continues and the HUD explains that saving is unavailable.
 - `deliciousmove.save.recovery.<timestamp>[.<suffix>]`: originals archived by explicit restart.
 - `deliciousmove.language`: explicit `en` or `es` preference.
 - `deliciousmove.records`: version-1 lifetime records (`bestLevel`, `bestScore`).
-- `deliciousmove.resources`: version-1 consumable ledger (`lives`, `nextLifeAt`,
+- `deliciousmove.resources`: version-2 consumable ledger (`lives`, `nextLifeAt`,
   `observedAt`, optional `attempt` containing checkpoint identity, level, remaining
-  `bank`, and an optional failure reason). This is not a board checkpoint.
+  `bank`, optional journey metadata, and an optional failure reason). The current
+  format is version 2; version 1 migrates in memory. This is not a board checkpoint.
+- `deliciousmove.collection`: version-1 lifetime mastery, selected board theme, and
+  the latest 120 local daily results keyed by UTC date and rules version.
 
 `PlayerResources` owns an injectable wall clock. Lives start/cap at five and regenerate
 once per 1,800,000 ms, including offline. Full lives do not accumulate extra regeneration
@@ -71,11 +74,37 @@ Records have their own version because they outlive individual run checkpoints. 
 versions or malformed records are preserved without overwrite; the HUD reports the issue.
 Future record format changes must add an explicit migration before enabling writes.
 
+Journey metadata contains the selected safe/challenge route and distinct active perk
+IDs with one to four levels remaining. It is captured in completed checkpoints and
+in the active attempt ledger. Starting the next level commits the choice immediately
+without saving a board. Reloading reconstructs that level with the same route and
+perk durations, and then reconciles the bank. Retry refreshes the board and perk
+charges without advancing perk durations. New Game removes journey metadata while
+preserving lives, records, mastery, and cosmetic selection.
+
+Resource version 1→2 preserves lives, deadlines, observed time, remaining bank,
+checkpoint identity, and failure status. No route or perk is invented for an old
+attempt. Migration is in memory; the next resource write emits version 2. Corrupt
+and newer ledgers remain preserved. The idempotent failure and clock rules above
+continue to apply.
+
 The checkpoint contains `schemaVersion`, `rulesVersion`, `savedAt`, board dimensions,
 all tile identities/colors/specials/positions/kinds/layers, optional cell terrain
 (playable mask, jelly, ice, exits), the next tile ID, objective definitions/progress, complete session
-configuration/counters, and the mulberry32 random-generator state. Snapshots are
+configuration/counters, optional journey metadata, and the mulberry32 random-generator state. Snapshots are
 independent copies, not references to mutable game objects.
+Cell snapshots additionally retain conveyor destinations, portal destinations, and
+boss shield markings. Optional board mechanics retain the valid-turn count, boss
+definition, and spent Crosswind charge. Portal gravity is validated as acyclic with
+at most one incoming edge per cell; conveyor links must form closed disjoint cycles.
+These fields also travel in diagnostic pre-turn and cascade snapshots.
+
+Daily, laboratory, and puzzle modes use independent in-memory saves and free resource
+services. They do not load or mutate campaign saves/resources/records. Daily results
+and campaign mastery use the separate collection store; practice never earns mastery.
+Collection writes preserve unknown or invalid originals and show their status in the
+recipe book. Daily links include the rules version and reject mismatched versions.
+The collection is cosmetic/local bookkeeping, not a server-authoritative score ledger.
 
 `Board`, `GameSession`, and `IStatefulRandomSource` export/restore domain snapshots.
 `SaveCodec` validates and migrates them through the `ISaveCodec` contract. `SaveStore` handles browser storage,
@@ -97,7 +126,7 @@ original before allowing a new checkpoint.
 
 ## Adding a breaking change
 
-The current save format is **schema 3 / rules 5**. Installed 1→2 migrations retain
+The current save format is **schema 4 / rules 6**. Installed 1→2 migrations retain
 the original board, score, level, banked moves, global score, and RNG. A legacy
 checkpoint receives an explicit score objective and matching progress. Missing
 terrain means a full rectangle. It still resumes at its victory screen; only
@@ -113,9 +142,13 @@ levels/retries use the lower move allowances and incidental-special protection r
 Rules 4→5 preserves the entire checkpoint and RNG unchanged while enabling Last chance
 on future turns. Previously recorded failures are not retroactively rescued or refunded.
 The `last_chance` session state is transient and cannot be exported as a checkpoint.
+Schema 3→4 preserves the existing board, session, and RNG while allowing optional
+journey and board-mechanism fields on future saves. Rules 5→6 likewise preserves the
+saved level and completion state; routes, perks, and authored milestones apply when
+new levels are generated. Legacy completed checkpoints remain completed.
 
 Migration occurs in memory on load and never rewrites the original raw checkpoint.
-The next completed-level save writes schema 3 / rules 5 and rotates the readable original to backup.
+The next completed-level save writes schema 4 / rules 6 and rotates the readable original to backup.
 Older clients must reject newer saves rather than reinterpret their counters or cell/object data.
 Old diagnostic turn replays may produce different results after a gameplay bug fix;
 exact replay still requires the game revision that produced the report.
@@ -137,15 +170,15 @@ Example of a future field rename (illustrative, not an installed migration):
 
 ```ts
 const schemaMigrations: MigrationRegistry = new Map([
-  [3, (old) => {
+  [4, (old) => {
     const { savedAt, ...rest } = old;
-    return { ...rest, checkpointAt: savedAt, schemaVersion: 4 };
+    return { ...rest, checkpointAt: savedAt, schemaVersion: 5 };
   }],
 ]);
 ```
 
 That example also requires updating the current interface, validator and writer to
-use `checkpointAt`, setting the current schema to 4, and extending the existing
+use `checkpointAt`, setting the current schema to 5, and extending the existing
 default registry without removing earlier migrations. Constructor injection allows fixture testing against future
 versions without changing production defaults.
 

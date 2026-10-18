@@ -37,7 +37,7 @@ describe('versioned saves', () => {
   it('migrates pre-finale rules without changing the saved board, counters, or completion state', () => {
     const original = fixture(); original.rulesVersion = 4;
     const migrated = new SaveCodec().decode(JSON.stringify(original));
-    expect(migrated).toEqual({ ...JSON.parse(JSON.stringify(original)), rulesVersion: 5 });
+    expect(migrated).toEqual({ ...JSON.parse(JSON.stringify(original)), rulesVersion: GAME_RULES_VERSION });
     expect(original.rulesVersion).toBe(4);
   });
   it('allows a codec substitute without requiring migration internals', () => {

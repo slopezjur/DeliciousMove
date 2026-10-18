@@ -9,8 +9,11 @@ import { IBoardView } from './IBoardViewContracts.ts';
 import { calculateBoardLayout } from './BoardLayout.ts';
 import { CellState } from '../core/BoardFeatures.ts';
 import { TerrainView } from './TerrainView.ts';
+import type { BoardTheme } from '../core/Collection.ts';
+import { BOARD_PALETTES } from './BoardTheme.ts';
 
 export class BoardView extends Container implements IBoardView {
+  private theme: BoardTheme = 'classic';
   public get displayObject(): this { return this; }
 
   public readonly board: Board;
@@ -56,14 +59,14 @@ export class BoardView extends Container implements IBoardView {
   }
 
   private createGridBackground(): void {
-    this.bgContainer.removeChildren();
+    this.bgContainer.removeChildren().forEach(child => child.destroy());
     this.cellSprites = [];
 
     for (let r = 0; r < this.board.rows; r++) {
       const row: Graphics[] = [];
       for (let c = 0; c < this.board.cols; c++) {
         const isAlt = (r + c) % 2 === 1;
-        const cell = new Graphics(AssetFactory.getCellBgContext(isAlt));
+        const cell = new Graphics(AssetFactory.getCellBgContext(isAlt, this.theme));
         cell.scale.set(this.tileSize / 96);
         this.bgContainer.addChild(cell);
         row.push(cell);
@@ -77,6 +80,9 @@ export class BoardView extends Container implements IBoardView {
    *                centred once inside the remaining area rather than shifted afterwards.
    */
   public updateLayout(availableWidth: number, availableHeight: number, offsetY: number = 0): void {
+    const preference = typeof document !== 'undefined' ? document.body?.dataset.boardTheme : undefined;
+    const theme: BoardTheme = preference === 'mint' || preference === 'cocoa' || preference === 'royal' ? preference : 'classic';
+    if (theme !== this.theme) { this.theme = theme; this.createGridBackground(); }
     const layout = calculateBoardLayout(availableWidth, availableHeight, this.board.rows, this.board.cols);
     this.tileSize = layout.tileSize;
     this.boardPixelWidth = layout.boardWidth;
@@ -112,6 +118,7 @@ export class BoardView extends Container implements IBoardView {
 
   private drawFancyFrame(padding: number): void {
     this.frameGraphics.clear();
+    const palette = BOARD_PALETTES[this.theme];
 
     const w = this.boardPixelWidth;
     const h = this.boardPixelHeight;
@@ -122,8 +129,8 @@ export class BoardView extends Container implements IBoardView {
 
     // 2. Outer Bevel Frame (Deep Royal Mahogany / Purple-Gold)
     this.frameGraphics.roundRect(-padding, -padding, w + padding * 2, h + padding * 2, 20);
-    this.frameGraphics.fill({ color: 0x240f3b, alpha: 0.96 });
-    this.frameGraphics.stroke({ color: 0xffd700, width: 3, alpha: 0.75 });
+    this.frameGraphics.fill({ color: palette.frame, alpha: 0.96 });
+    this.frameGraphics.stroke({ color: palette.trim, width: 3, alpha: 0.75 });
 
     // 3. Inner Highlight Trim
     this.frameGraphics.roundRect(-padding + 3, -padding + 3, w + (padding - 3) * 2, h + (padding - 3) * 2, 16);
@@ -131,7 +138,7 @@ export class BoardView extends Container implements IBoardView {
 
     // 4. Recessed Velvet Tile Bed (Playfield background behind cells)
     this.frameGraphics.roundRect(-2, -2, w + 4, h + 4, 10);
-    this.frameGraphics.fill({ color: 0x120622, alpha: 0.98 });
+    this.frameGraphics.fill({ color: palette.inner, alpha: 0.98 });
     this.frameGraphics.stroke({ color: 0x080210, width: 2, alpha: 0.9 });
 
     // 5. Four Ornate Golden Corner Rivets / Gems

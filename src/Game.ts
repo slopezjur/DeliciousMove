@@ -18,7 +18,7 @@ import { BoardInitializer, IBoardInitializer } from './core/BoardInitializer.ts'
 import { CascadeResolver, ICascadeResolver } from './core/CascadeResolver.ts';
 import { MatchDetector } from './core/MatchDetector.ts';
 import { SpecialResolver } from './core/SpecialResolver.ts';
-import { SpecialRegistry } from './core/specials/SpecialRegistry.ts';
+import { SpecialRegistry, StripedHorizontalHandler, StripedVerticalHandler } from './core/specials/SpecialRegistry.ts';
 import { AirplaneTargetSelector } from './core/specials/AirplaneTargetSelector.ts';
 import { ScoreCalculator } from './core/ScoreCalculator.ts';
 import { BoardGravitySystem } from './core/BoardGravitySystem.ts';
@@ -27,7 +27,7 @@ import { ShuffleEngine, IDeadlockResolver } from './core/ShuffleEngine.ts';
 import { GameSession, GameState, IGameSession } from './core/GameSession.ts';
 import { InfiniteLevelProgression } from './core/LevelProgression.ts';
 import { IRandomSource, MathRandomSource, SeededRandomSource, isStatefulRandomSource } from './core/random/IRandomSource.ts';
-import { ALL_TILE_COLORS, Position } from './core/TileTypes.ts';
+import { ALL_TILE_COLORS, Position, SpecialType } from './core/TileTypes.ts';
 import { BoardView } from './view/BoardView.ts';
 import { IBoardView } from './view/IBoardViewContracts.ts';
 import { AnimationQueue } from './view/AnimationQueue.ts';
@@ -51,10 +51,21 @@ import { IIdleHintController } from './input/IIdleHintController.ts';
 import { SettingsView } from './ui/SettingsView.ts';
 import { LevelBoardSetup } from './core/LevelFeatures.ts';
 import { TerrainResolver } from './core/TerrainResolver.ts';
+import { PerkEffects } from './core/Journey.ts';
+import { PerkStripeHandler } from './core/specials/PerkStripeHandler.ts';
+import { CollectionStore } from './persistence/CollectionStore.ts';
+import type { ICollectionStore } from './core/Collection.ts';
+import { GameFeaturesController } from './ui/GameFeaturesController.ts';
+import { modeProgress as createModeProgress, type IModeProgress } from './modes/ModeProgress.ts';
+import type { PlayMode } from './modes/PlayMode.ts';
 
 const END_OF_TURN_MODAL_DELAY_MS = 400;
 
 export interface GameDependencies {
+  mode?: PlayMode;
+  collectionStorage?: IStorage;
+  collection?: ICollectionStore;
+  modeProgress?: IModeProgress;
   /** Test/practice entry point; production always starts at level 1 or its checkpoint. */
   initialLevel?: number;
   now?: () => number;
@@ -88,6 +99,11 @@ export interface GameDependencies {
  * Turn logic lives in TurnCoordinator, level rules in GameSession (SRP).
  */
 export class Game {
+  private readonly mode: PlayMode;
+  private readonly perks = new PerkEffects();
+  private readonly modeProgress: IModeProgress;
+  private readonly features: GameFeaturesController;
+  private choosingRoute = false;
   private readonly initialLevel: number;
   private readonly language: ILanguageService;
   private readonly saves: ISaveStore;
@@ -115,8 +131,11 @@ export class Game {
   private readonly debug: GameDebugController;
 
   constructor(deps: GameDependencies = {}) {
+    this.mode = deps.mode ?? { kind: 'campaign' };
     this.initialLevel = deps.initialLevel ?? 1;
     const storage = deps.storage ?? new BrowserStorage();
+    const collection = deps.collection ?? new CollectionStore(deps.collectionStorage ?? storage);
+    this.modeProgress = deps.modeProgress ?? createModeProgress(this.mode, collection);
     this.language = deps.language ?? new LanguageService(storage, typeof navigator === 'undefined' ? 'en' : navigator.language);
     this.saves = deps.saves ?? new SaveStore(storage);
     this.saveStatusView = new SaveStatusView(this.language);
@@ -135,7 +154,7 @@ export class Game {
     this.boardView = deps.boardView ?? new BoardView(this.board);
     this.layout = new GameLayoutController(this.app, this.boardView, () => this.turnInFlight);
     this.session = deps.session ?? new GameSession(new InfiniteLevelProgression());
-    this.modal = deps.modal ?? new GameModalView(this.onModalAction.bind(this), sound, this.language);
+    this.modal = deps.modal ?? new GameModalView(() => { void this.onModalAction(); }, sound, this.language, this.mode.kind !== 'campaign');
     this.hud = deps.hud ?? new HUDView(this.language);
 
     this.deadlockResolver =
@@ -172,6 +191,9 @@ export class Game {
         deadlockResolver: this.deadlockResolver,
         isInputLocked: () => this.inputController.isLocked(),
       });
+    const registry = new SpecialRegistry(random, new AirplaneTargetSelector(random, () => this.session.getObjectives()));
+    registry.registerEffectHandler(new PerkStripeHandler(new StripedHorizontalHandler(), this.perks));
+    registry.registerEffectHandler(new PerkStripeHandler(new StripedVerticalHandler(), this.perks));
     const cascadeResolver =
       deps.cascadeResolver ??
       new CascadeResolver(
@@ -179,8 +201,8 @@ export class Game {
         new BoardGravitySystem(),
         new TileSpawner(ALL_TILE_COLORS, random),
         new MatchDetector(),
-        new SpecialResolver(new SpecialRegistry(random, new AirplaneTargetSelector(random, () => this.session.getObjectives()))),
-        new TerrainResolver(random)
+        new SpecialResolver(registry),
+        new TerrainResolver(random, () => this.perks.has('thaw') ? 2 : 1)
       );
 
     this.turnCoordinator =
@@ -193,6 +215,7 @@ export class Game {
         session: this.session,
         telemetry: this.telemetry,
         getRandomSnapshot: () => isStatefulRandomSource(this.random) ? this.random.getSnapshot() : undefined,
+        onResolved: (result, pair, automatic) => this.modeProgress.observe(result, pair, automatic),
       });
 
     this.debug = new GameDebugController(
@@ -205,6 +228,14 @@ export class Game {
       deps.debugOverlay,
       this.language
     );
+    this.features = new GameFeaturesController({
+      language: this.language, mode: this.mode, collection, progress: this.modeProgress,
+      session: this.session, board: this.board, boardView: this.boardView,
+      clipboard: deps.clipboardService,
+      isPlaying: () => this.turnInFlight,
+      onRestart: () => this.startNewGame(), onFinishBonus: () => this.finishBonus(),
+      onLayoutChanged: () => this.onResize(),
+    });
     this.bindSessionEvents();
   }
 
@@ -220,6 +251,7 @@ export class Game {
     this.layout.attach(containerElement);
 
     new SettingsView();
+    this.features.init();
     new LanguageControls(this.language, () => this.onResize());
     this.recordsView.render();
     this.language.subscribe(() => this.refreshLives());
@@ -231,6 +263,7 @@ export class Game {
     if (!this.resources.snapshot().lives && this.session.getState() === GameState.Ready) this.modal.showNoLives();
     this.lives.start();
     this.renderSaveStatus();
+    this.refreshFeatures();
     requestAnimationFrame(() => this.onResize());
   }
 
@@ -259,6 +292,7 @@ export class Game {
       onObjectivesUpdated: (objectives) => {
         this.hud.updateObjectives(objectives);
         this.hud.setBonusPhase(this.session.isBonusPhase());
+        this.refreshFeatures();
       },
       onLevelStarted: (config) => {
         this.progress.beginAttempt(this.session);
@@ -274,14 +308,16 @@ export class Game {
         if (added > 0) this.hud.addScore(added, globalScore, isBonusPhase);
       },
       onMovesUpdated: (moves, isFrozen) => {
-        this.hud.updateMoves(moves, isFrozen, this.session.getLevelMovesLeft(), this.session.getAccumulatedMoves());
+        this.hud.updateMoves(moves, isFrozen, this.session.getLevelMovesLeft(), this.session.getAccumulatedMoves(), this.session.getSnapshot().unlimitedMoves);
         this.progress.recordBank(this.session);
       },
       onShufflesUpdated: (shuffles) => this.hud.updateShuffles(shuffles),
       onStateChanged: (state, snapshot) => {
         this.hud.setLastChance(state === GameState.LastChance);
         this.hud.setBonusPhase(this.session.isBonusPhase());
+        this.refreshFeatures();
         if (state === GameState.Victory) {
+          this.modeProgress.complete(snapshot.score, this.session.getAccumulatedMoves());
           this.idleHintController.stop();
           this.telemetry.recordStateTransition('victory', `Score: ${snapshot.score}`);
           this.debug.refresh();
@@ -313,10 +349,16 @@ export class Game {
 
   /** A level always opens on a solvable board; this free reshuffle is not charged. */
   private buildPlayableBoard(): void {
+    this.perks.reset(this.session.getSnapshot().journey);
+    this.modeProgress.startLevel(this.session.getAccumulatedMoves());
     const setup = new LevelBoardSetup();
     setup.configure(this.board, this.session.getLevelConfig().features);
     this.boardInitializer.populate(this.board);
     setup.placeObjects(this.board, this.session.getLevelConfig().features);
+    if (this.perks.has('airdrop')) {
+      const candidate = this.board.getSnapshot().tiles.find(t => this.board.canMatch(t) && this.board.canSwap(t) && t.special === SpecialType.None);
+      if (candidate) this.board.get(candidate.row, candidate.col)!.special = SpecialType.Airplane;
+    }
     if (!this.deadlockResolver.hasPossibleMoves(this.board)) {
       this.deadlockResolver.shuffleBoard(this.board);
     }
@@ -324,13 +366,24 @@ export class Game {
     this.boardView.initFromBoard();
     this.onResize();
     this.inputController.setLocked(!this.canPlay());
+    this.features.highlightLesson();
+    this.refreshFeatures();
   }
 
   /** A failed attempt retries this level; only explicit New Game resets the ladder. */
-  private onModalAction(): void {
+  private async onModalAction(): Promise<void> {
+    if (this.choosingRoute || this.turnInFlight) return;
+    if (this.mode.kind !== 'campaign') { this.startNewGame(); return; }
     if (this.resources.snapshot().lives <= 0) { this.modal.showNoLives(); return; }
     if (this.session.getState() === GameState.Victory) {
-      this.session.advanceLevel();
+      if (this.features.journey) {
+        this.choosingRoute = true;
+        try {
+          const choice = await this.features.journey.choose(this.session.previewNextLevel(), this.session.getSnapshot().journey);
+          if (choice) this.session.advanceLevel(choice);
+          else this.modal.showVictory(this.session.getScore(), this.session.getLevel(), this.session.getMovesLeft(), this.session.getGlobalScore());
+        } finally { this.choosingRoute = false; }
+      } else this.session.advanceLevel();
     } else if (this.session.getState() === GameState.GameOver) this.session.retryLevel();
     else this.modal.hide();
     this.refreshLives();
@@ -342,19 +395,24 @@ export class Game {
     if (this.turnInFlight) return false;
     if (!this.canPlay()) { this.inputController.setLocked(true); return false; }
     this.turnInFlight = true;
+    this.modeProgress.beginTurn();
+    this.refreshFeatures();
     this.idleHintController.stop();
     const newGameButton = document.getElementById('new-game-btn') as HTMLButtonElement | null;
     if (newGameButton) newGameButton.disabled = true;
+    let played = false;
     try {
-      const played = await action();
+      played = await action();
       if (played) this.saveProgress();
       return played;
     } finally {
+      this.modeProgress.endTurn(played);
       this.turnInFlight = false;
       this.layout.flush();
       if (newGameButton) newGameButton.disabled = false;
       this.debug.refresh();
       this.refreshLives();
+      this.refreshFeatures();
     }
   }
 
@@ -376,9 +434,11 @@ export class Game {
   private restoreProgress(): boolean {
     if (!this.progress.restore(this.board, this.random, this.session)) return false;
     const save = this.progress.savedRun!;
+    this.perks.reset(this.session.getSnapshot().journey);
+    this.modeProgress.startLevel(this.session.getAccumulatedMoves());
     this.hud.initLevel(save.session.config, save.session.accumulatedMoves, save.session.globalScore);
     this.hud.addScore(save.session.score, save.session.globalScore, this.session.isBonusPhase());
-    this.hud.updateMoves(save.session.movesLeft, this.session.isTargetReached(), this.session.getLevelMovesLeft(), this.session.getAccumulatedMoves());
+    this.hud.updateMoves(save.session.movesLeft, this.session.isTargetReached(), this.session.getLevelMovesLeft(), this.session.getAccumulatedMoves(), this.session.getSnapshot().unlimitedMoves);
     this.hud.updateShuffles(save.session.shufflesLeft);
     this.hud.updateObjectives(this.session.getObjectives());
     this.boardView.initFromBoard();
@@ -403,4 +463,14 @@ export class Game {
   private refreshLives(): void {
     this.lives.refresh();
   }
+
+  private finishBonus(): void {
+    if (this.turnInFlight || this.session.getState() !== GameState.Ready || !this.session.isBonusPhase()) return;
+    this.session.completeWithVictory();
+    this.saveProgress();
+    this.refreshLives();
+    this.refreshFeatures();
+  }
+
+  private refreshFeatures(): void { this.features.refresh(); }
 }

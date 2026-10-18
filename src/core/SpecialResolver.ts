@@ -112,16 +112,15 @@ export class SpecialResolver implements ISpecialResolver {
       if (!handler) continue;
 
       const chained: TileData[] = [];
-      effects.push(
-        handler.execute({
-          board,
-          sourceTile: tile,
-          destroyedTileIds,
-          triggerQueue: chained,
-          triggerColor,
-          protectedTileIds: options.protectedTileIds,
-        })
-      );
+      const { extraEffects, ...effect } = handler.execute({
+        board,
+        sourceTile: tile,
+        destroyedTileIds,
+        triggerQueue: chained,
+        triggerColor,
+        protectedTileIds: options.protectedTileIds,
+      });
+      effects.push(effect, ...(extraEffects ?? []));
 
       // Direct airplane targets detonate without inheriting a trigger color.
       for (const uncovered of chained) {

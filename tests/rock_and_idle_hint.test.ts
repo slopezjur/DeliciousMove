@@ -179,6 +179,20 @@ describe('Rock Obstacles & Idle Hint System', () => {
       vi.useRealTimers();
     });
 
+    it('uses activation eligibility and never hints an ice-locked special', () => {
+      const board = new Board(3, 3), special = board.createTile(1, 1, TileColor.Red, SpecialType.Wrapped);
+      board.getCell(1, 1)!.ice = 1;
+      const animations = { animateHint: vi.fn() };
+      const hints = new IdleHintController(board, { findPossibleMoves: () => [] }, { canMakeMove: () => true }, animations);
+      try {
+        hints.start(); vi.advanceTimersByTime(IDLE_HINT_DELAY_MS);
+        expect(animations.animateHint).not.toHaveBeenCalled();
+        board.getCell(1, 1)!.ice = 0;
+        hints.resetTimer(); vi.advanceTimersByTime(IDLE_HINT_DELAY_MS);
+        expect(animations.animateHint).toHaveBeenCalledWith([special.id]);
+      } finally { hints.stop(); }
+    });
+
     it('triggers hint animation on combineable sprites after 10s inactivity', () => {
       const board = new Board(8, 8);
       for (let r = 0; r < 8; r++) {

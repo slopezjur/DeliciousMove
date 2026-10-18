@@ -44,6 +44,8 @@ change browser language detection in the game.
 - Open **Settings** (gear) and use the language selector, or press **L**, to change language. The selector shows the current language. The browser language is used initially;
   unsupported languages fall back to English. Explicit choices are remembered.
 - **New Game** starts a fresh run after confirmation; it preserves the old checkpoint in a recovery archive.
+- **Settings → Play modes** opens the daily challenge, combo laboratory, and puzzle room.
+  The same menu is available on result screens, including when campaign lives run out.
 
 Match rewards:
 
@@ -171,6 +173,9 @@ description above the board, so the board stays in place.
 When no legal swap or direct special activation remains during bonus play, the level
 ends in victory. The next level receives its base moves plus all unused moves from
 the previous level. Level score resets; global score continues accumulating.
+Players can also open **Bonus / Extra ⓘ → Finish bonus** between turns. This completes
+the level immediately, saves its checkpoint, and preserves every unused move. The
+button is disabled during playback and before all objectives are complete.
 The HUD separates **Level moves** from **Bank**. Level moves are spent first, then
 the bank is highlighted and spent. Neither budget is spent during bonus play.
 
@@ -247,6 +252,83 @@ For a one-move finale fixture, open `?practiceLevel=1&practiceLastChance=1` and 
 the top-left stripe. It intentionally uses an unreachable score target to demonstrate
 the automatic finale followed by a single life debit; retry restores the fixture.
 
+## Routes, perks, and authored milestones
+
+After a campaign victory, **Next Level** opens a route and perk selection. Escape
+returns to the victory screen without committing a choice. The preview shows the
+next level's objectives, move budget, and mandatory minimum score.
+
+- **Safe route:** standard level configuration and move budget.
+- **Challenge route:** two fewer base moves (minimum six) and a 15% higher score
+  requirement, rounded to 50. Winning makes the next selected perk last four levels.
+- Choose one perk on every advance. New perks normally last three levels, including
+  the upcoming level. Existing perks lose one level of duration when advancing;
+  selecting one again refreshes it. Different perks can coexist, up to three.
+- **Airdrop:** an airplane is placed on an eligible ordinary candy at level start.
+- **Crosswind:** the first individual stripe activation also clears the next parallel
+  line, or the previous line at the board edge. The extra blast preserves ordinary
+  special/rock protection. Combo secondary stripe detonations can use the charge;
+  a striped+striped cross does not independently fire a stripe handler.
+- **Warm hands:** each ice hit removes up to two layers. The thawed candy survives
+  that pass, as in ordinary ice rules.
+
+Retries retain the route and remaining perk durations and reset per-attempt charges.
+New Game clears the journey. Selected route/perks persist as attempt metadata;
+reloading still restarts the board under the completed-level checkpoint policy.
+
+Authored campaign milestones begin at level 15. Every tenth level from 20 is a
+**Chocolate fountain** boss; the intervening five-level milestones rotate through
+**Caramel conveyor**, **Cherry express**, and **Crate escape**. They retain the
+difficulty cycle and mandatory score, adding these board rules:
+
+- Gold conveyor arrows advance candies simultaneously once after a valid player
+  turn's cascades, then resolve new matches. A belt containing ice, rocks, or fixed
+  blockers pauses intact. Rejected swaps and Last chance activations do not move it.
+- Purple portal entrances feed green outlets at the top of another gravity segment.
+  Surviving candies and cherries can fall across columns while retaining identity.
+  Portal entrances are not ingredient delivery exits. Transport links form acyclic
+  gravity paths; belts are closed cycles with distinct cells.
+- Boss frosting has three nodes with three layers each. Only the gold-outlined node
+  takes damage; other nodes are shielded. The weak spot rotates every three valid
+  player turns, and destroying a node exposes another survivor. Clear all three and
+  meet the score target. Last chance can damage the exposed node without advancing
+  the boss clock. The HUD explains the mechanic and shows the rotation countdown.
+
+## Daily challenges, laboratory, and mastery
+
+**Daily challenge** uses a date in UTC and the current game rules version to derive
+a fixed seed and authored puzzle family. Each attempt has identical goals, base
+moves, and shuffles, with no campaign perks or bank. Retries reconstruct the same
+opening board and reset its RNG. Scores include bonus play. Local best results use
+score first, then fewer valid player turns, including bonus turns, as the tiebreaker.
+**Share challenge / Share result** copies a dated link including the rules version;
+incompatible links are rejected. Results are local comparisons, without an online
+leaderboard or server score validation. The latest 120 daily results are retained.
+
+**Combo laboratory** offers four formation/thaw lessons and all ten documented
+special combinations. Each lesson supplies a prepared board, an outlined source
+candy, one-based move coordinates, completion feedback, unlimited moves, reset,
+and the next lesson. Specials should be dragged to combine them; tapping still
+activates them individually. **Puzzle room** provides the four authored challenge
+families with fixed seeds and limited moves. Both modes grant free retries.
+
+Side modes use isolated in-memory game saves, records, and resources. They never
+spend campaign lives, bank, or perks. Returning to campaign uses its normal saved
+checkpoint and attempt ledger. Language and unlocked cosmetic preferences remain
+available across modes. Side modes do not earn campaign mastery.
+
+**Settings → Recipe book** tracks three lifetime campaign recipes:
+
+- Complete a level without spending banked moves to unlock **Mint**.
+- Deliver three cherries in one player turn, including its automatic finale, to
+  unlock **Cocoa**.
+- Trigger all ten documented special combinations across campaign play to unlock
+  **Royal**. The book lists each discovered combination.
+
+Themes change the board cells, frame, and page background. Recipes and selection
+survive New Game. Collection storage is versioned; corrupt or newer data is
+preserved, with in-memory progress and a warning in the recipe book.
+
 ## Saved progress
 
 Progress is saved locally **only when a level is completed**, after bonus play and
@@ -275,6 +357,9 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
   Rules share `SpawnPlacement` without importing their registry. Detection depends
   on `IMatchRuleReader`; registration is a separate capability.
 - `CascadeResolver`: match evolution, detonation, gravity, refill, and score events.
+- `IBoardMechanicsResolver`: replaceable end-of-turn transport and post-clear cell
+  refresh policy. `BoardMechanicsResolver` supplies the conveyor and boss rules;
+  automatic Last chance activations refresh cells without advancing mechanics.
 - `LastChanceQueue`: a bounded queue of original usable special IDs, independent of
   animation and session state. `TurnCoordinator` runs it before deciding an out-of-moves loss.
 - `TileSpawner`: fills empty cells. `IRefillPolicy.beginWave()` supplies tile selection
@@ -295,11 +380,28 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
   `PlayerLivesController.dispose()` releases the life timer and visibility listener.
 - `SpawnMotion`: pure segment-aware refill timing, independent of Pixi/GSAP.
 - `GameSession` and `ILevelProgression`: score, moves, phase state, and level configuration.
+- `PlayMode`: mode definitions, parsing, and budgets. `ModeDependencies` composes their
+  runtime services at the entry point; views do not import dependency assembly.
+- `ModeProgress`: turn accounting and mode-specific progress policies. Campaign mastery,
+  daily results, and manual lab completion use separate hooks through `ICollectionRecorder`.
+  Rejected turns are excluded, and automatic finales share the triggering turn's deliveries.
+- `GameFeaturesController`: feature controls, dialog wiring, theme selection commands,
+  and projection of board mechanics into display-only status values. `PlayModesView`
+  receives those values and never owns lesson completion or writes HUD metrics.
+  Daily sharing uses the existing `IClipboardService` adapter, shared with diagnostics
+  when a custom clipboard service is supplied.
+- `Collection`: domain-owned mastery data, theme identities, and unlock rules. Recipe
+  views use `ICollectionReader`; selection commands use `ICollectionPreferences`.
+  `CollectionStore` supplies persistence through `ICollectionStore`, without coupling
+  rendering assets to browser storage.
+- `FreePlayResources`: unlimited lives with a local attempt ledger. Bank spending,
+  failure idempotency, and journey snapshots retain the resource contract in side modes.
 - `TurnCoordinator`: coordinates turns through `IAnimationSequencer`, passing tile IDs
   and positions. Its `ITurnSession` and `ITurnTelemetry` ports exclude run lifecycle,
   persistence, and diagnostic-reading operations. Objective reporting is required,
   so replacement sessions cannot silently discard objective events.
 - `IdleHintController`: requests hints through the separate `IHintAnimator` contract.
+  Direct-special hints reuse `Board.canActivate`, including ice and blocker restrictions.
 - `AnimationQueue`, `BoardView`, and effect presenters: sprite lookup and visual playback.
   The board exposes a typed `displayObject` for mounting into the Pixi stage.
   Animations use structural `ITileVisual` objects, not concrete `TileSprite` containers
@@ -314,6 +416,8 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
   one service across settings, modal, and animations; independent games can use separate services.
   `SoundControlsView` owns the localized mute toggle through a two-method preferences
   port; `HUDView` owns gameplay metrics, not sound settings.
+  `ISoundEffects` and `ISoundPreferences` separate playback from settings. The modal
+  requires only victory audio; animation consumers never require mute controls.
 - `GameTelemetryService`: diagnostic history and snapshots. Input lock state arrives
   through a read-only callback, without importing input-controller code.
 - `GameDebugController`: optional overlay and browser debug API. Both diagnostic views
@@ -325,6 +429,8 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
 - `LevelProgressView`: sole owner of the aggregate goal bar and minimum-score completion marker.
   `ObjectivesView` owns only goal cards. `HUDView` presents bonus eligibility supplied
   explicitly by `GameSession`; completed counters never independently enter bonus play.
+  `HUDView` also owns the moves counter for every mode; the session's `unlimitedMoves`
+  display flag supplies the lab's infinity label and localized accessible description.
 - `SaveCodec` / `SaveStore`: validated, versioned checkpoints and browser-storage policy.
   The store accepts `ISaveCodec`; migration internals are not part of its dependency.
 - `SaveStatusView`: localized checkpoint indicators and warnings; receives status values
@@ -367,4 +473,4 @@ ignored while input is locked or the session cannot accept a move.
 ## Feature backlog
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for prioritized ways to add variety.
-These are proposed features, not implemented mechanics.
+The roadmap distinguishes implemented mechanics from follow-up ideas.

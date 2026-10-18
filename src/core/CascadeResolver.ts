@@ -2,6 +2,7 @@ import { Board } from './Board.ts';
 import { IMatchDetector, MatchDetector } from './MatchDetector.ts';
 import { isProductiveColorSwap } from './matching/MatchEligibility.ts';
 import { ITerrainResolver, TerrainResolver } from './TerrainResolver.ts';
+import { BoardMechanicsResolver, type IBoardMechanicsResolver } from './BoardMechanics.ts';
 import {
   ISpecialResolver,
   SpecialResolver,
@@ -50,7 +51,8 @@ export class CascadeResolver implements ICascadeResolver {
     tileSpawner: ITileSpawner = new TileSpawner(),
     matchDetector: IMatchDetector = new MatchDetector(),
     specialResolver: ISpecialResolver = new SpecialResolver(),
-    private readonly terrain: ITerrainResolver = new TerrainResolver()
+    private readonly terrain: ITerrainResolver = new TerrainResolver(),
+    private readonly mechanics: IBoardMechanicsResolver = new BoardMechanicsResolver()
   ) {
     this.scoreCalculator = scoreCalculator;
     this.gravitySystem = gravitySystem;
@@ -78,7 +80,7 @@ export class CascadeResolver implements ICascadeResolver {
     );
     this.continueCascades(board, steps, 2, avoidMatches);
     // The finale extends the last player turn; automatic activations are not new growth turns.
-    return context === 'last_chance' ? { valid: true, steps } : this.finishTurn(board, steps);
+    return context === 'last_chance' ? { valid: true, steps } : this.finishTurn(board, steps, avoidMatches);
   }
 
   /**
@@ -113,7 +115,7 @@ export class CascadeResolver implements ICascadeResolver {
         this.executeDestroyAndCollapse(board, specialCombo.destroyedTileIds, [], [], specialCombo.effects, 1, avoidMatches)
       );
       this.continueCascades(board, steps, 2, avoidMatches);
-      return this.finishTurn(board, steps);
+      return this.finishTurn(board, steps, avoidMatches);
     }
 
     const swappedA = board.get(posA.row, posA.col)!;
@@ -143,7 +145,7 @@ export class CascadeResolver implements ICascadeResolver {
         this.executeDestroyAndCollapse(board, destroyedTileIds, [], [], effects, 1, avoidMatches)
       );
       this.continueCascades(board, steps, 2, avoidMatches);
-      return this.finishTurn(board, steps);
+      return this.finishTurn(board, steps, avoidMatches);
     }
 
     // 4. Otherwise process matches, also including any swapped specials that were not in match groups
@@ -159,10 +161,15 @@ export class CascadeResolver implements ICascadeResolver {
       this.continueCascades(board, steps, 2, avoidMatches);
     }
 
-    return this.finishTurn(board, steps);
+    return this.finishTurn(board, steps, avoidMatches);
   }
 
-  private finishTurn(board: Board, steps: CascadeStep[]): SwapResult {
+  private finishTurn(board: Board, steps: CascadeStep[], avoidMatches = false): SwapResult {
+    const movement = this.mechanics.advance(board);
+    if (movement) {
+      steps.push(movement);
+      this.continueCascades(board, steps, 1, avoidMatches);
+    }
     const growth = this.terrain.spread(board, steps);
     if (growth) steps.push(growth);
     return { valid: true, steps };
@@ -301,6 +308,9 @@ export class CascadeResolver implements ICascadeResolver {
         board.set(r, c, null);
       }
     });
+
+    const cellsAfter = this.mechanics.refresh(board);
+    if (cellsAfter) terrainChanges.cellsAfter = cellsAfter;
 
     const drops = this.gravitySystem.applyGravity(board);
     const spawns = this.tileSpawner.refillEmptySlots(board, avoidMatches);

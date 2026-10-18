@@ -3,7 +3,7 @@ import { Board } from './core/Board.ts';
 import { ICascadeResolver } from './core/CascadeResolver.ts';
 import { IDeadlockResolver } from './core/ShuffleEngine.ts';
 import { IGameSession } from './core/GameSession.ts';
-import { Position, SpecialType } from './core/TileTypes.ts';
+import { Position, SpecialType, type SwapResult } from './core/TileTypes.ts';
 import { IAnimationSequencer } from './view/IAnimationSequencer.ts';
 import { IGameTelemetryService } from './core/telemetry/IGameTelemetry.ts';
 import { LastChanceQueue } from './core/LastChanceQueue.ts';
@@ -23,6 +23,7 @@ export type ITurnTelemetry = Pick<IGameTelemetryService,
   'recordTurnDetails' | 'recordSwap' | 'recordActivation' | 'recordShuffle'>;
 
 export interface TurnCoordinatorDependencies {
+  onResolved?: (result: SwapResult, pair?: readonly [SpecialType, SpecialType], automatic?: boolean) => void;
   board: Board;
   animations: IAnimationSequencer;
   cascadeResolver: ICascadeResolver;
@@ -38,6 +39,7 @@ export interface TurnCoordinatorDependencies {
  * on abstractions so it can be driven headlessly in tests.
  */
 export class TurnCoordinator implements ITurnCoordinator {
+  private readonly onResolved?: TurnCoordinatorDependencies['onResolved'];
   private readonly getRandomSnapshot?: () => RandomSnapshot | undefined;
   private readonly board: Board;
   private readonly animations: IAnimationSequencer;
@@ -47,6 +49,7 @@ export class TurnCoordinator implements ITurnCoordinator {
   private readonly telemetry?: ITurnTelemetry;
 
   constructor(deps: TurnCoordinatorDependencies) {
+    this.onResolved = deps.onResolved;
     this.getRandomSnapshot = deps.getRandomSnapshot;
     this.board = deps.board;
     this.animations = deps.animations;
@@ -79,6 +82,7 @@ export class TurnCoordinator implements ITurnCoordinator {
     const boardBefore = this.board.getSnapshot();
     const sessionBefore = this.session.getSnapshot();
     const randomBefore = this.getRandomSnapshot?.();
+    const pair: readonly [SpecialType, SpecialType] = [tileA.special, tileB.special];
     // 1. Show the swap before the model commits to it.
     await this.animations.animateSwap(tileA.id, tileB.id, from, to);
 
@@ -96,6 +100,7 @@ export class TurnCoordinator implements ITurnCoordinator {
     });
 
     // 2. Valid move: charge it and play out the cascade.
+    this.onResolved?.(result, pair);
     const scoreBefore = this.session.getScore();
     this.session.onMoveInitiated();
     await this.animations.playCascadeSteps(result.steps, (gained, events) => {
@@ -132,6 +137,7 @@ export class TurnCoordinator implements ITurnCoordinator {
     const avoidMatches = this.session.isTargetReached();
     const result = this.cascadeResolver.resolveActivation(this.board, pos, avoidMatches);
     if (!result.valid) return false;
+    this.onResolved?.(result);
     this.telemetry?.recordTurnDetails?.({
       boardBefore, sessionBefore, randomBefore, from: pos,
       boardAfter: this.board.getSnapshot(), steps: result.steps,
@@ -166,6 +172,7 @@ export class TurnCoordinator implements ITurnCoordinator {
       const randomBefore = this.getRandomSnapshot?.();
       const result = this.cascadeResolver.resolveActivation(this.board, from, false, 'last_chance');
       if (result.valid) {
+        this.onResolved?.(result, undefined, true);
         queue.record(result.steps);
         this.telemetry?.recordTurnDetails?.({
           boardBefore, sessionBefore, randomBefore, from, activationContext: 'last_chance',

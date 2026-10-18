@@ -6,6 +6,7 @@ import {
 } from './LevelProgression.ts';
 import { ObjectiveEvent, ObjectiveProgress } from './BoardFeatures.ts';
 import { ObjectiveTracker } from './ObjectiveTracker.ts';
+import { applyRoute, nextJourney, type JourneyChoice, type JourneyState } from './Journey.ts';
 
 export enum GameState {
   Ready = 'ready',
@@ -22,6 +23,8 @@ export enum GameOverReason {
 
 /** Immutable view of the session handed to listeners on every state transition. */
 export interface SessionSnapshot {
+  unlimitedMoves?: boolean;
+  journey?: JourneyState;
   levelMovesLeft?: number;
   objectives?: ObjectiveProgress[];
   level: number;
@@ -47,6 +50,7 @@ export interface GameSessionListener {
 }
 
 export interface SessionSaveState {
+  journey?: JourneyState;
   levelMovesLeft?: number;
   objectiveProgress?: number[];
   config: LevelConfig;
@@ -70,9 +74,10 @@ export interface IGameSession {
   restore(saved: SessionSaveState): void;
   addListener(listener: GameSessionListener): () => void;
   restart(): void;
-  advanceLevel(): void;
-  startLevel(level: number, carriedMoves?: number): void;
+  advanceLevel(choice?: JourneyChoice): void;
+  startLevel(level: number, carriedMoves?: number, journey?: JourneyState): void;
   getLevelConfig(): LevelConfig;
+  previewNextLevel(): LevelConfig;
   getLevel(): number;
   getScore(): number;
   getGlobalScore(): number;
@@ -97,6 +102,7 @@ export interface IGameSession {
 
 export class GameSession implements IGameSession {
   private readonly progression: ILevelProgression;
+  private journey?: JourneyState;
 
   private config: LevelConfig;
   private objectives: ObjectiveTracker;
@@ -110,7 +116,8 @@ export class GameSession implements IGameSession {
   private gameOverReason?: GameOverReason;
   private listeners: GameSessionListener[] = [];
 
-  constructor(progression: ILevelProgression = new InfiniteLevelProgression(), startLevel = 1) {
+  constructor(progression: ILevelProgression = new InfiniteLevelProgression(), startLevel = 1,
+    private readonly rules: { unlimitedMoves?: boolean } = {}) {
     this.progression = progression;
     this.config = this.progression.getConfig(startLevel);
     this.objectives = this.createObjectives();
@@ -122,8 +129,9 @@ export class GameSession implements IGameSession {
   public exportState(): SessionSaveState {
     if (this.state === GameState.Resolving || this.state === GameState.LastChance) throw new Error('Cannot save an unfinished turn.');
     return {
+      ...(this.journey ? { journey: structuredClone(this.journey) } : {}),
       objectiveProgress: this.getObjectives().map(p => p.current),
-      config: { ...this.config }, score: this.currentScore, globalScore: this.globalScore,
+      config: structuredClone(this.config), score: this.currentScore, globalScore: this.globalScore,
       levelMovesLeft: this.levelMovesLeft,
       movesLeft: this.movesLeft, shufflesLeft: this.shufflesLeft,
       accumulatedMoves: this.accumulatedMoves, state: this.state, reason: this.gameOverReason,
@@ -132,7 +140,8 @@ export class GameSession implements IGameSession {
 
   /** Restore silently; the application rebuilds presentation without starting a new level. */
   public restore(saved: SessionSaveState): void {
-    this.config = { ...saved.config };
+    this.journey = saved.journey ? structuredClone(saved.journey) : undefined;
+    this.config = structuredClone(saved.config);
     this.objectives = this.createObjectives(saved.objectiveProgress);
     this.currentScore = saved.score;
     this.globalScore = saved.globalScore;
@@ -153,19 +162,22 @@ export class GameSession implements IGameSession {
 
   /** Restarts the run from level 1 and resets banked moves & global score. */
   public restart(): void {
+    this.journey = undefined;
     this.globalScore = 0;
     this.accumulatedMoves = 0;
     this.startLevel(1, 0);
   }
 
   /** Moves on to the next level, carrying over unused moves. */
-  public advanceLevel(): void {
+  public advanceLevel(choice?: JourneyChoice): void {
     const surplusMoves = Math.max(0, this.movesLeft);
+    this.journey = nextJourney(this.journey, choice);
     this.startLevel(this.config.level + 1, surplusMoves);
   }
 
-  public startLevel(level: number, carriedMoves: number = 0): void {
-    this.config = this.progression.getConfig(level);
+  public startLevel(level: number, carriedMoves: number = 0, journey?: JourneyState): void {
+    if (journey) this.journey = structuredClone(journey);
+    this.config = applyRoute(this.progression.getConfig(level), this.journey);
     this.objectives = this.createObjectives();
     this.currentScore = 0;
     this.accumulatedMoves = carriedMoves;
@@ -199,6 +211,8 @@ export class GameSession implements IGameSession {
   public getLevelConfig(): LevelConfig {
     return this.config;
   }
+
+  public previewNextLevel(): LevelConfig { return structuredClone(this.progression.getConfig(this.config.level + 1)); }
 
   public getLevel(): number {
     return this.config.level;
@@ -263,7 +277,7 @@ export class GameSession implements IGameSession {
   }
 
   public completeWithVictory(): GameState {
-    if (!this.isTargetReached() || this.state === GameState.GameOver) return this.state;
+    if (!this.isTargetReached() || this.state === GameState.GameOver || this.state === GameState.Victory) return this.state;
     this.setState(GameState.Victory);
     return this.state;
   }
@@ -278,6 +292,8 @@ export class GameSession implements IGameSession {
 
   public getSnapshot(): SessionSnapshot {
     return {
+      ...(this.rules.unlimitedMoves ? { unlimitedMoves: true } : {}),
+      ...(this.journey ? { journey: structuredClone(this.journey) } : {}),
       objectives: this.getObjectives(),
       level: this.config.level,
       score: this.currentScore,
@@ -301,7 +317,7 @@ export class GameSession implements IGameSession {
   public onMoveInitiated(): void {
     if (!this.canMakeMove()) return;
     // Moves are frozen once the minimum target is achieved so surplus moves are banked for next levels
-    if (!this.isTargetReached()) {
+    if (!this.isTargetReached() && !this.rules.unlimitedMoves) {
       this.movesLeft--;
       if (this.levelMovesLeft > 0) this.levelMovesLeft--;
       else this.accumulatedMoves--;

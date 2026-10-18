@@ -14,7 +14,7 @@ export class SettingsView {
         || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
     });
     // Leave the top layer before opening diagnostics or the restart confirmation.
-    for (const id of ['debug-toggle-btn', 'new-game-btn']) {
+    for (const id of ['debug-toggle-btn', 'new-game-btn', 'play-modes-btn', 'recipe-book-btn']) {
       document.getElementById(id)?.addEventListener('click', () => dialog.close(), { capture: true });
     }
   }

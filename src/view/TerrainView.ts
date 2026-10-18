@@ -5,9 +5,29 @@ import { CellState } from '../core/BoardFeatures.ts';
 export class TerrainView extends Graphics {
   public renderCells(cells: readonly CellState[], size: number): void {
     this.clear();
+    const portalExits = new Set(cells.filter(cell => cell.portalTo).map(cell => `${cell.portalTo!.row},${cell.portalTo!.col}`));
     for (const cell of cells) {
       if (!cell.playable) continue;
       const x = cell.col * size, y = cell.row * size;
+      if (cell.conveyorTo) {
+        const dx = Math.sign(cell.conveyorTo.col - cell.col), dy = Math.sign(cell.conveyorTo.row - cell.row);
+        const cx = x + size * .5, cy = y + size * .5;
+        this.roundRect(x + 2, y + 2, size - 4, size - 4, size * .12).stroke({ color: 0xffc56a, width: 2, alpha: .8 });
+        this.moveTo(cx - dx * size * .16 - dy * size * .12, cy - dy * size * .16 + dx * size * .12)
+          .lineTo(cx + dx * size * .14, cy + dy * size * .14)
+          .lineTo(cx - dx * size * .16 + dy * size * .12, cy - dy * size * .16 - dx * size * .12)
+          .stroke({ color: 0xffc56a, width: 3 });
+      }
+      const portalExit = portalExits.has(`${cell.row},${cell.col}`);
+      if (cell.portalTo || portalExit) {
+        this.ellipse(x + size * .5, y + size * .5, size * .44, size * .36)
+          .stroke({ color: cell.portalTo ? 0xb78aff : 0x59f0cf, width: Math.max(3, size * .06), alpha: .95 });
+      }
+      if (cell.bossShielded !== undefined) {
+        this.roundRect(x + 2, y + 2, size - 4, size - 4, size * .12)
+          .stroke({ color: cell.bossShielded ? 0x9b98b5 : 0xffdf73, width: cell.bossShielded ? 3 : 5 });
+        if (cell.bossShielded) this.roundRect(x + 2, y + 2, size - 4, size - 4, size * .12).fill({ color: 0x151528, alpha: .5 });
+      }
       if (cell.jelly > 0) {
         this.roundRect(x + 3, y + 3, size - 6, size - 6, size * .16)
           .stroke({ color: 0xff7ce4, width: Math.max(3, size * .06), alpha: .9 });

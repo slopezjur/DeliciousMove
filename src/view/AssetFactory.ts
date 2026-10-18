@@ -1,5 +1,7 @@
 import { GraphicsContext } from 'pixi.js';
 import { TileColor, SpecialType } from '../core/TileTypes.ts';
+import type { BoardTheme } from '../core/Collection.ts';
+import { BOARD_PALETTES } from './BoardTheme.ts';
 
 export class AssetFactory {
   private static candyCache: Map<string, GraphicsContext> = new Map();
@@ -42,15 +44,16 @@ export class AssetFactory {
   /**
    * Grid cell background tile GraphicsContext (frosted dark square)
    */
-  public static getCellBgContext(isAlt: boolean): GraphicsContext {
-    const key = `cell_bg_${isAlt ? 'alt' : 'main'}`;
+  public static getCellBgContext(isAlt: boolean, theme: BoardTheme = 'classic'): GraphicsContext {
+    const key = `cell_bg_${theme}_${isAlt ? 'alt' : 'main'}`;
     if (this.cellBgCache.has(key)) {
       return this.cellBgCache.get(key)!;
     }
 
     const ctx = new GraphicsContext();
     ctx.roundRect(-48, -48, 96, 96, 16);
-    ctx.fill({ color: 0x000000, alpha: isAlt ? 0.32 : 0.20 });
+    const palette = BOARD_PALETTES[theme];
+    ctx.fill({ color: isAlt ? palette.alternate : palette.cell, alpha: .9 });
     ctx.stroke({ color: 0xffffff, width: 2, alpha: 0.1 });
 
     this.cellBgCache.set(key, ctx);

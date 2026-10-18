@@ -1,7 +1,7 @@
 import type { ILocalization } from '../i18n/ILanguageService.ts';
 import { IGameModalView } from './IGameModalView.ts';
 import { GameOverReason } from '../core/GameSession.ts';
-import { ISoundService } from '../audio/ISoundService.ts';
+import type { ISoundEffects } from '../audio/ISoundService.ts';
 import { SoundManager } from '../audio/SoundManager.ts';
 
 import { LanguageService } from '../i18n/LanguageService.ts';
@@ -16,7 +16,7 @@ export class GameModalView implements IGameModalView {
   private modalGlobalScore: HTMLElement | null;
   private modalDetail: HTMLElement | null;
   private modalBtn: HTMLElement | null;
-  private soundService: ISoundService;
+  private soundService: Pick<ISoundEffects, 'playVictory'>;
   private redraw?: () => void;
   private lives: LivesSnapshot = { lives: 5, maximum: 5, secondsToNext: 0 };
   private awaitingLife = false;
@@ -25,7 +25,8 @@ export class GameModalView implements IGameModalView {
    * @param onAction Invoked when the player confirms the modal. The caller decides what
    *                 that means for the current state (advance a level or restart the run).
    */
-  constructor(onAction: () => void, soundService: ISoundService = new SoundManager(), private readonly language: ILocalization = new LanguageService()) {
+  constructor(onAction: () => void, soundService: Pick<ISoundEffects, 'playVictory'> = new SoundManager(), private readonly language: ILocalization = new LanguageService(),
+    private readonly isolatedMode = false) {
     this.soundService = soundService;
     language.subscribe(() => this.redraw?.());
     this.modalEl = this.findElement('game-modal');
@@ -53,8 +54,8 @@ export class GameModalView implements IGameModalView {
         : this.language.t('nextWaiting', { level: level + 1 });
       this.render({
         title: this.language.t('victoryTitle'),
-        detail: this.language.t('cleared', { level }) + ' ' + savedMsg,
-        score, globalScore, buttonLabel: this.language.t('nextLevel'),
+        detail: this.language.t('cleared', { level }) + ' ' + (this.isolatedMode ? this.language.t('sideModeSaved') : savedMsg),
+        score, globalScore, buttonLabel: this.language.t(this.isolatedMode ? 'playAgain' : 'nextLevel'),
       });
     };
     this.redraw();
@@ -66,7 +67,8 @@ export class GameModalView implements IGameModalView {
       const deadlock = reason === GameOverReason.Deadlock;
       this.render({
         title: this.language.t(deadlock ? 'deadlockTitle' : 'outTitle'),
-        detail: this.language.t(deadlock ? 'deadlockDetail' : 'outDetail') + ' ' + this.language.t('retryDetail', { level }) + ' ' + this.waitMessage(),
+        detail: this.language.t(deadlock ? 'deadlockDetail' : 'outDetail') + ' ' + (this.isolatedMode ? this.language.t('freeRetry')
+          : this.language.t('retryDetail', { level }) + ' ' + this.waitMessage()),
         score, buttonLabel: this.language.t(this.lives.lives > 0 ? 'retryLevel' : 'noLives'),
       });
     };

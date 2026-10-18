@@ -16,6 +16,7 @@ export type ComboEffectType =
   | 'combo_color_bomb_airplane';
 
 export interface SpecialTriggerEffect {
+  extraEffects?: SpecialTriggerEffect[];
   sourceTile: TileData;
   affectedTileIds: number[];
   effectType: ComboEffectType;

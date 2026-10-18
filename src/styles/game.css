@@ -496,3 +496,40 @@ button:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
 .debug-panel { max-height: 100%; }
 .dbg-btn { min-height: 44px; }
 #modal-action-btn:focus-visible { outline: 3px solid #ffe082; outline-offset: 3px; }
+
+/* Feature panels use native dialogs so keyboard focus stays inside the active choice. */
+.feature-dialog { margin: auto; width: min(680px, calc(100% - 24px)); max-height: calc(100dvh - 32px); padding: 24px; border: 1px solid #ffffff30; border-radius: 20px; color: #fff; background: #211232; overflow-y: auto; overscroll-behavior: contain; }
+.feature-dialog::backdrop { background: #090410c9; }
+.feature-dialog h2 { font-size: 22px; margin-bottom: 12px; }
+.feature-dialog h3 { font-size: 16px; }
+.feature-dialog p { color: #d1c5de; line-height: 1.5; font-size: 14px; margin: 8px 0 14px; }
+.feature-dialog fieldset { min-width: 0; border: 1px solid #ffffff26; border-radius: 12px; padding: 12px; margin: 16px 0; }
+.feature-dialog legend { padding: 0 8px; font-weight: 700; }
+.feature-actions, .mode-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.feature-choice { display: flex; gap: 12px; align-items: flex-start; padding: 14px; margin: 8px 0; min-height: 44px; border: 1px solid #ffffff26; border-radius: 12px; cursor: pointer; }
+.feature-choice:has(input:checked) { border-color: #ffe082; background: #ffe0820d; }
+.feature-choice:focus-within { outline: 2px solid #ffe082; outline-offset: 2px; }
+.feature-choice input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; accent-color: #ffe082; }
+.feature-choice > span { display: grid; gap: 6px; min-width: 0; }
+.feature-choice span span, .feature-choice small { color: #d1c5de; font-size: 13px; line-height: 1.5; }
+.feature-choice small { color: #ffe082; }
+.primary-action { background: #724315; border-color: #ffe08266; color: #fff2c5; font-weight: 700; }
+#finish-bonus-btn { margin-top: 16px; width: 100%; }
+.feature-link { display: flex; align-items: center; min-height: 44px; padding: 10px 12px; border: 1px solid #ffffff30; border-radius: 10px; color: #fff; text-decoration: none; font-size: 13px; overflow-wrap: anywhere; }
+.feature-link:hover { background: #ffffff12; }
+.feature-link:focus-visible { outline: 3px solid #ffe082; outline-offset: 2px; }
+.mode-section, .recipe-entry { padding: 18px 0; border-top: 1px solid #ffffff20; margin-top: 16px; }
+.mode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 8px; }
+.combo-checklist { padding-left: 0; list-style: none; display: grid; gap: 8px; font-size: 13px; line-height: 1.4; }
+.feature-dialog .feature-accent { color: #ffe082; }
+.feature-status { grid-column: 1 / -1; order: 2; margin-top: 10px; display: grid; gap: 5px; font-size: 11px; line-height: 1.4; color: #d1c5de; overflow-wrap: anywhere; }
+.feature-status[hidden] { display: none; }
+.feature-status strong { color: #ffe082; }
+.feature-status .mode-actions { margin: 4px 0; }
+.feature-status .mode-actions button, .feature-status .feature-link { font-size: 11px; padding: 6px 9px; }
+#modal-modes-btn { display: block; margin: 12px auto 0; }
+body[data-play-mode] .lives-row, body[data-play-mode] #bank-moves, body[data-play-mode] .personal-records, body[data-play-mode] #save-detail { display: none; }
+body[data-board-theme="mint"] { background: #0a201a; }
+body[data-board-theme="cocoa"] { background: #24140d; }
+body[data-board-theme="royal"] { background: #0e1830; }
+@media (max-width: 420px) { .feature-dialog { padding: 16px; } .feature-choice { padding: 10px; gap: 8px; } }

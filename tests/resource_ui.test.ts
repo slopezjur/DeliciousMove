@@ -3,14 +3,13 @@ import { GameModalView } from '../src/ui/GameModalView.ts';
 import { LivesView } from '../src/ui/LivesView.ts';
 import { HUDView } from '../src/ui/HUDView.ts';
 import { LanguageService } from '../src/i18n/LanguageService.ts';
-import { SoundManager } from '../src/audio/SoundManager.ts';
 import { GameOverReason } from '../src/core/GameSession.ts';
 import { LevelDifficulty } from '../src/core/LevelProgression.ts';
 
 function dom(ids: string[]) {
   const elements = new Map(ids.map(id => {
     const classes = new Set<string>();
-    return [id, { textContent: '', disabled: false, style: {}, showModal: vi.fn(), close: vi.fn(),
+    return [id, { textContent: '', disabled: false, style: {}, showModal: vi.fn(), close: vi.fn(), setAttribute: vi.fn(),
       addEventListener: vi.fn(), classList: { add: (s: string) => classes.add(s), remove: (s: string) => classes.delete(s),
         contains: (s: string) => classes.has(s), toggle: (s: string, value: boolean) => value ? classes.add(s) : classes.delete(s) } }];
   }));
@@ -21,7 +20,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 it('disables retry at zero, updates the countdown and enables retry after regeneration in either language', () => {
   const el = dom(['modal-title', 'modal-detail', 'modal-action-btn', 'game-modal', 'lives-value', 'lives-timer']);
-  const language = new LanguageService(), modal = new GameModalView(vi.fn(), new SoundManager(), language);
+  const language = new LanguageService(), modal = new GameModalView(vi.fn(), { playVictory: vi.fn() }, language);
   const lives = new LivesView(language);
   const empty = { lives: 0, maximum: 5, secondsToNext: 61 };
   modal.updateLives(empty); modal.showGameOver(400, 7, GameOverReason.OutOfMoves); lives.render(empty, 'available');
@@ -106,4 +105,16 @@ it('aggregates score and feature progress regardless of score/objective update o
     { objective: { kind: 'jelly', target: 10 }, current: 2 }]);
   hud.addScore(100);
   expect(el('progress-fill').style).toMatchObject({ width: '60%' });
+});
+
+it('owns unlimited-moves text and accessibility labels across language and level changes', () => {
+  const el = dom(['moves-value']), language = new LanguageService(), hud = new HUDView(language);
+  hud.updateMoves(99, false, 99, 0, true);
+  expect(el('moves-value').textContent).toBe('∞');
+  expect(el('moves-value').setAttribute).toHaveBeenLastCalledWith('aria-label', language.t('labUnlimited'));
+  language.setLocale('es');
+  expect(el('moves-value').setAttribute).toHaveBeenLastCalledWith('aria-label', language.t('labUnlimited'));
+  hud.updateMoves(22, false, 22, 0);
+  expect(el('moves-value').textContent).toBe('22');
+  expect(el('moves-value').setAttribute).toHaveBeenLastCalledWith('aria-label', '22');
 });

@@ -1,11 +1,11 @@
 import { ComboEffectType, SpecialTriggerEffect } from '../../core/specials/ISpecialHandler.ts';
-import { ISoundService } from '../../audio/ISoundService.ts';
+import { ISoundEffects } from '../../audio/ISoundService.ts';
 import { IBoardViewAnimator } from '../IBoardViewContracts.ts';
 
 export interface EffectPresentationContext {
   boardView: Pick<IBoardViewAnimator,
     'tileSize' | 'boardPixelWidth' | 'boardPixelHeight' | 'vfx' | 'getTileSprite' | 'gridToLocal' | 'screenShake'>;
-  sound: Pick<ISoundService, 'playSpecialLaser' | 'playBombExplosion' | 'playAirplaneFly'>;
+  sound: Pick<ISoundEffects, 'playSpecialLaser' | 'playBombExplosion' | 'playAirplaneFly'>;
   /** Local pixel position of the tile that triggered the effect. */
   position: { x: number; y: number };
 }

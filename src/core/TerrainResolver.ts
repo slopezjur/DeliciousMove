@@ -16,7 +16,7 @@ export interface ITerrainResolver {
 
 /** Cell effects never run for rejected swaps. Damage is capped at one layer per cascade pass. */
 export class TerrainResolver implements ITerrainResolver {
-  constructor(private readonly random: IRandomSource = new MathRandomSource()) {}
+  constructor(private readonly random: IRandomSource = new MathRandomSource(), private readonly iceDamage: () => number = () => 1) {}
 
   public applyHits(board: Board, destroyed: Set<number>, matched: readonly TileData[] = []): TerrainHitResult {
     const events: ObjectiveEvent[] = [], updatedTiles: TileData[] = [];
@@ -45,11 +45,12 @@ export class TerrainResolver implements ITerrainResolver {
       const cell = board.getCell(p.row, p.col);
       if (!cell?.playable) continue;
       if (cell.ice > 0) {
-        cell.ice--;
+        cell.ice = Math.max(0, cell.ice - this.iceDamage());
         if (cell.ice === 0) events.push({ kind: 'blocker', blocker: 'ice', amount: 1 });
       }
       const tile = board.get(p.row, p.col);
       if (tile && isBlocker(tile)) {
+        if (cell.bossShielded) continue;
         tile.layers = (tile.layers ?? 1) - 1;
         if (tile.layers <= 0) {
           destroyed.add(tile.id);

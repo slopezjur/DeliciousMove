@@ -1,17 +1,19 @@
 import { GameOverReason } from '../core/GameSession.ts';
 import { IStorage } from './Storage.ts';
+import { isJourney, type JourneyState } from '../core/Journey.ts';
 
 export const RESOURCES_KEY = 'deliciousmove.resources';
 export const MAX_LIVES = 5;
 export const LIFE_REGEN_MS = 30 * 60 * 1000;
 export interface AttemptResources {
+  journey?: JourneyState;
   checkpoint: string;
   level: number;
   bank: number;
   failed?: GameOverReason;
 }
 interface ResourceData {
-  version: 1;
+  version: 2;
   lives: number;
   nextLifeAt: number | null;
   observedAt: number;
@@ -27,7 +29,7 @@ export interface ILivesReader {
 
 export interface IPlayerResources extends ILivesReader {
   getAttempt(checkpoint: string): AttemptResources | undefined;
-  beginAttempt(checkpoint: string, level: number, bank: number): number;
+  beginAttempt(checkpoint: string, level: number, bank: number, journey?: JourneyState): number;
   spendBank(checkpoint: string, level: number, bank: number): void;
   fail(checkpoint: string, level: number, bank: number, reason: GameOverReason): boolean;
   clearAttempt(): void;
@@ -38,7 +40,7 @@ export class PlayerResources implements IPlayerResources {
   private data: ResourceData;
   public status: ResourceStatus = 'available';
   constructor(private readonly storage: IStorage, private readonly now: () => number = Date.now) {
-    this.data = { version: 1, lives: MAX_LIVES, nextLifeAt: null, observedAt: now() };
+    this.data = { version: 2, lives: MAX_LIVES, nextLifeAt: null, observedAt: now() };
     this.refresh();
   }
 
@@ -50,14 +52,14 @@ export class PlayerResources implements IPlayerResources {
 
   getAttempt(checkpoint: string): AttemptResources | undefined {
     this.refresh();
-    return this.data.attempt?.checkpoint === checkpoint ? { ...this.data.attempt } : undefined;
+    return this.data.attempt?.checkpoint === checkpoint ? structuredClone(this.data.attempt) : undefined;
   }
 
-  beginAttempt(checkpoint: string, level: number, bank: number): number {
+  beginAttempt(checkpoint: string, level: number, bank: number, journey?: JourneyState): number {
     this.refresh();
     const old = this.data.attempt;
     if (old?.checkpoint === checkpoint && old.level === level) bank = Math.min(bank, old.bank);
-    this.data.attempt = { checkpoint, level, bank };
+    this.data.attempt = { checkpoint, level, bank, ...(journey ? { journey: structuredClone(journey) } : {}) };
     this.persist();
     return bank;
   }
@@ -74,7 +76,9 @@ export class PlayerResources implements IPlayerResources {
     this.refresh();
     const old = this.data.attempt;
     if (old?.checkpoint === checkpoint && old.level === level && old.failed) return false;
-    this.data.attempt = { checkpoint, level, bank: old?.checkpoint === checkpoint && old.level === level ? Math.min(bank, old.bank) : bank, failed: reason };
+    const same = old?.checkpoint === checkpoint && old.level === level;
+    this.data.attempt = { checkpoint, level, bank: same ? Math.min(bank, old.bank) : bank, failed: reason,
+      ...(same && old.journey ? { journey: structuredClone(old.journey) } : {}) };
     if (this.data.lives > 0) this.data.lives--;
     if (this.data.nextLifeAt === null) this.data.nextLifeAt = this.time() + LIFE_REGEN_MS;
     this.persist();
@@ -91,7 +95,10 @@ export class PlayerResources implements IPlayerResources {
         const raw = this.storage.getItem(RESOURCES_KEY);
         if (raw) {
           let saved: ResourceData;
-          try { saved = JSON.parse(raw); } catch { this.status = 'preserved'; return; }
+          try {
+            const decoded = JSON.parse(raw);
+            saved = decoded?.version === 1 ? { ...decoded, version: 2 } : decoded;
+          } catch { this.status = 'preserved'; return; }
           if (!this.valid(saved)) { this.status = 'preserved'; return; }
           saved.observedAt = Math.max(saved.observedAt, this.data.observedAt);
           this.data = saved;
@@ -110,11 +117,12 @@ export class PlayerResources implements IPlayerResources {
 
   private valid(value: ResourceData): boolean {
     const natural = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
-    if (!value || value.version !== 1 || !natural(value.lives) || value.lives > MAX_LIVES || !natural(value.observedAt)) return false;
+    if (!value || value.version !== 2 || !natural(value.lives) || value.lives > MAX_LIVES || !natural(value.observedAt)) return false;
     if (value.lives === MAX_LIVES ? value.nextLifeAt !== null : !natural(value.nextLifeAt)) return false;
     const a = value.attempt;
     return !a || (typeof a.checkpoint === 'string' && a.checkpoint.length < 200 && natural(a.level) && a.level > 0
-      && natural(a.bank) && (a.failed === undefined || Object.values(GameOverReason).includes(a.failed)));
+      && natural(a.bank) && (a.journey === undefined || isJourney(a.journey))
+      && (a.failed === undefined || Object.values(GameOverReason).includes(a.failed)));
   }
 
   private persist(): void {

@@ -47,7 +47,7 @@ export class RunProgress {
         : initialLevel;
       if (attempt && attempt.level === level) {
         if (restored && this.savedRun?.session.state !== GameState.Victory) session.reconcileBank(attempt.bank);
-        else session.startLevel(attempt.level, attempt.bank);
+        else session.startLevel(attempt.level, attempt.bank, attempt.journey);
         if (attempt.failed) session.failAttempt(attempt.failed);
         else if (session.getState() === GameState.Ready) session.onTurnCompleted();
       } else if (!restored) {
@@ -58,9 +58,9 @@ export class RunProgress {
     if (session.getState() === GameState.Ready) this.beginAttempt(session);
   }
 
-  beginAttempt(session: Pick<IGameSession, 'getLevel' | 'getAccumulatedMoves' | 'reconcileBank'>): void {
+  beginAttempt(session: Pick<IGameSession, 'getLevel' | 'getAccumulatedMoves' | 'reconcileBank' | 'getSnapshot'>): void {
     if (this.restoring) return;
-    const bank = this.resources.beginAttempt(this.checkpoint, session.getLevel(), session.getAccumulatedMoves());
+    const bank = this.resources.beginAttempt(this.checkpoint, session.getLevel(), session.getAccumulatedMoves(), session.getSnapshot().journey);
     session.reconcileBank(bank);
   }
 

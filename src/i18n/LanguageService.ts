@@ -1,10 +1,12 @@
 import { IStorage } from '../persistence/Storage.ts';
 import type { ILanguageService } from './ILanguageService.ts';
+import { featureEn, featureEs } from './FeatureMessages.ts';
 
 export type Locale = 'en' | 'es';
 export const LANGUAGE_KEY = 'deliciousmove.language';
 
 const en = {
+  ...featureEn,
   lastChance: 'Last chance', lastChanceTip: 'No moves left. Remaining specials activate before the level result is decided.',
   bonusShort: 'Bonus',
   levelMoves: 'Level moves', bankMoves: 'Bank', lives: 'Lives', livesFull: 'Full', nextLife: '+1 in {time}',
@@ -17,7 +19,7 @@ const en = {
   recordsTip: 'Personal records update only after completing a level and survive New Game.',
   recordsUnavailable: 'Records cannot be saved in this browser.',
   recordsPreserved: 'Unreadable or newer records preserved; record saving is paused.',
-  bonusExplanation: 'Objectives complete! Moves are frozen. Keep matching for extra points until no moves remain.',
+  bonusExplanation: 'Objectives complete! Moves are frozen. Keep matching for extra points, or finish the bonus now and bank all unused moves.',
   allRequired: 'Complete every level objective to unlock the bonus round.',
   objectives: 'Objectives', practiceMode: 'Practice level {level} · Progress is not saved',
   collectColor: 'Collect {color}', clearBlocker: 'Clear {blocker}',
@@ -67,6 +69,7 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 const es: Record<MessageKey, string> = {
+  ...featureEs,
   lastChance: 'Última oportunidad', lastChanceTip: 'Sin movimientos. Se activan los especiales restantes antes de decidir el resultado del nivel.',
   bonusShort: 'Extra',
   levelMoves: 'Del nivel', bankMoves: 'Reserva', lives: 'Vidas', livesFull: 'Completas', nextLife: '+1 en {time}',
@@ -79,7 +82,7 @@ const es: Record<MessageKey, string> = {
   recordsTip: 'Los récords se actualizan al completar un nivel y se conservan al iniciar una nueva partida.',
   recordsUnavailable: 'No se pueden guardar los récords en este navegador.',
   recordsPreserved: 'Récords ilegibles o más recientes conservados; su guardado está pausado.',
-  bonusExplanation: '¡Objetivos completados! Los movimientos están congelados. Sigue combinando para sumar puntos hasta que no queden jugadas.',
+  bonusExplanation: '¡Objetivos completados! Los movimientos están congelados. Sigue combinando para sumar puntos o termina la ronda extra y guarda todos los movimientos restantes.',
   allRequired: 'Completa todos los objetivos del nivel para desbloquear la ronda extra.',
   objectives: 'Objetivos', practiceMode: 'Nivel de práctica {level} · No se guarda el progreso',
   collectColor: 'Recoge {color}', clearBlocker: 'Elimina {blocker}',

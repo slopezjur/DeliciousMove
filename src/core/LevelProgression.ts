@@ -1,5 +1,6 @@
 import { LevelFeatures, Objective } from './BoardFeatures.ts';
 import { getLevelFeatures } from './LevelFeatures.ts';
+import { authoredMilestone, type PuzzleId } from './AuthoredLevels.ts';
 
 export enum LevelDifficulty {
   Easy = 'easy',
@@ -9,6 +10,7 @@ export enum LevelDifficulty {
 }
 
 export interface LevelConfig {
+  challenge?: PuzzleId;
   objectives?: Objective[];
   features?: LevelFeatures;
   level: number;
@@ -98,7 +100,7 @@ export class InfiniteLevelProgression implements ILevelProgression {
     const targetScore = Math.round(rawTarget / this.tuning.targetRounding) * this.tuning.targetRounding;
     const family = getLevelFeatures(clampedLevel);
 
-    return {
+    return authoredMilestone({
       ...family,
       objectives: [{ kind: 'score', target: targetScore }, ...(family.objectives ?? [])],
       level: clampedLevel,
@@ -106,6 +108,6 @@ export class InfiniteLevelProgression implements ILevelProgression {
       moves: preset.baseMoves,
       targetScore,
       shuffles: preset.shuffles,
-    };
+    });
   }
 }

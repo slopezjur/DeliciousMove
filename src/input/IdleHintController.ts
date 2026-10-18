@@ -2,7 +2,6 @@ import { Board } from '../core/Board.ts';
 import { IDeadlockResolver } from '../core/ShuffleEngine.ts';
 import { IGameSession } from '../core/GameSession.ts';
 import { IHintAnimator } from '../view/IAnimationSequencer.ts';
-import { SpecialType } from '../core/TileTypes.ts';
 import { IIdleHintController } from './IIdleHintController.ts';
 
 export const IDLE_HINT_DELAY_MS = 10_000;
@@ -63,7 +62,7 @@ export class IdleHintController implements IIdleHintController {
       // 2. Or check any activatable specials on the board
       const specials: number[] = [];
       this.board.forEachTile((t) => {
-        if (t.special !== SpecialType.None && t.special !== SpecialType.Rock) {
+        if (this.board.canActivate(t)) {
           specials.push(t.id);
         }
       });

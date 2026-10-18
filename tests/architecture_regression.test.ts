@@ -13,10 +13,35 @@ import { SpecialResolver } from '../src/core/SpecialResolver.ts';
 import { CascadeResolver } from '../src/core/CascadeResolver.ts';
 import { ITerrainResolver } from '../src/core/TerrainResolver.ts';
 import { LivesView } from '../src/ui/LivesView.ts';
+import { PerkStripeHandler } from '../src/core/specials/PerkStripeHandler.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Extensible policies and isolated dependencies', () => {
+  it.each(['player', 'last_chance'] as const)('injects mechanics refresh without a boss and advances only player turns (%s)', context => {
+    const board = new Board(3, 3), source = board.createTile(1, 1, TileColor.Blue, SpecialType.Wrapped);
+    const mechanics = {
+      advance: vi.fn(() => null),
+      refresh: vi.fn((b: Board) => { b.getCell(0, 0)!.jelly = 1; return b.getCells(); }),
+    };
+    const resolver = new CascadeResolver(undefined, undefined, { refillEmptySlots: () => [] }, undefined, undefined, undefined, mechanics);
+    const result = resolver.resolveActivation(board, source, false, context);
+    expect(result.steps[0].cellsAfter?.find(c => c.row === 0 && c.col === 0)?.jelly).toBe(1);
+    expect(mechanics.refresh).toHaveBeenCalledOnce();
+    expect(mechanics.advance).toHaveBeenCalledTimes(context === 'player' ? 1 : 0);
+  });
+
+  it('decorates a stripe using only a charge-consumption capability', () => {
+    const board = new Board(3, 3), source = board.createTile(1, 1, TileColor.Blue, SpecialType.StripedHorizontal);
+    const charge = { consumeStripe: vi.fn().mockReturnValueOnce(true).mockReturnValue(false) };
+    const stripe = new PerkStripeHandler({ supportedType: SpecialType.StripedHorizontal,
+      execute: context => ({ sourceTile: { ...context.sourceTile }, affectedTileIds: [], effectType: SpecialType.StripedHorizontal }) }, charge);
+    const context = { board, sourceTile: source, destroyedTileIds: new Set<number>(), triggerQueue: [] };
+    expect(stripe.execute(context).extraEffects?.[0].sourceTile.row).toBe(2);
+    expect(stripe.execute(context).extraEffects).toBeUndefined();
+    expect(charge.consumeStripe).toHaveBeenCalledWith(board);
+  });
+
   it('detects matches with a registry that exposes no registration operations', () => {
     const board = new Board(3, 3);
     board.createTile(0, 0, TileColor.Blue); board.createTile(0, 1, TileColor.Blue); board.createTile(0, 2, TileColor.Blue);

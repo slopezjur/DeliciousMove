@@ -3,9 +3,11 @@ import { GameState, GameOverReason, SessionSaveState } from '../core/GameSession
 import { LevelDifficulty } from '../core/LevelProgression.ts';
 import { RandomSnapshot } from '../core/random/IRandomSource.ts';
 import { SpecialType, TileColor } from '../core/TileTypes.ts';
+import { isJourney } from '../core/Journey.ts';
+import { PUZZLE_IDS } from '../core/AuthoredLevels.ts';
 
-export const SAVE_SCHEMA_VERSION = 3;
-export const GAME_RULES_VERSION = 5;
+export const SAVE_SCHEMA_VERSION = 4;
+export const GAME_RULES_VERSION = 6;
 
 export interface GameSave {
   schemaVersion: number;
@@ -58,13 +60,14 @@ const SCHEMA_MIGRATIONS: MigrationRegistry = new Map<number, SaveMigration>([[1,
   const total = integer(session.movesLeft), bank = integer(session.accumulatedMoves);
   return { ...input, schemaVersion: 3, session: { ...session,
     levelMovesLeft: Math.max(0, total - bank), accumulatedMoves: Math.min(bank, total) } };
-}]]);
+}], [3, input => ({ ...input, schemaVersion: 4 })]]);
 // Saved levels retain their original requirements; the next level uses current rules.
 const RULES_MIGRATIONS: MigrationRegistry = new Map([
   [1, input => ({ ...input, rulesVersion: 2 })],
   [2, input => ({ ...input, rulesVersion: 3 })],
   [3, input => ({ ...input, rulesVersion: 4 })],
   [4, input => ({ ...input, rulesVersion: 5 })],
+  [5, input => ({ ...input, rulesVersion: 6 })],
 ]);
 
 /** Migrations are pure, sequential transforms. Missing upgrade paths preserve the original save. */
@@ -113,13 +116,19 @@ export class SaveCodec implements ISaveCodec {
         const cell = record(raw), row = integer(cell.row, 0, rows - 1), col = integer(cell.col, 0, cols - 1);
         requireValue(typeof cell.playable === 'boolean' && typeof cell.exit === 'boolean');
         integer(cell.jelly, 0, 2); integer(cell.ice, 0, 3);
+        if (cell.bossShielded !== undefined) requireValue(typeof cell.bossShielded === 'boolean');
+        for (const name of ['portalTo', 'conveyorTo']) if (cell[name] !== undefined) {
+          const target = record(cell[name]); integer(target.row, 0, rows - 1); integer(target.col, 0, cols - 1);
+          requireValue(cell.playable === true && !(target.row === row && target.col === col));
+        }
         requireValue(!terrain.has(`${row},${col}`));
         if (!cell.playable) requireValue(cell.jelly === 0 && cell.ice === 0 && cell.exit === false);
         terrain.set(`${row},${col}`, cell);
       }
       for (const cell of terrain.values()) if (cell.exit) {
-        requireValue(terrain.get(`${Number(cell.row) + 1},${cell.col}`)?.playable !== true);
+        requireValue(!cell.portalTo && terrain.get(`${Number(cell.row) + 1},${cell.col}`)?.playable !== true);
       }
+      this.validateTransport(terrain);
     }
     const playable = terrain.size ? [...terrain.values()].filter(cell => cell.playable).length : rows * cols;
     requireValue(playable >= 9 && Array.isArray(board.tiles) && board.tiles.length === playable);
@@ -142,6 +151,13 @@ export class SaveCodec implements ISaveCodec {
       ids.add(id); cells.add(row + ',' + col);
     }
     const session = record(data.session), config = record(session.config);
+    if (session.journey !== undefined) requireValue(isJourney(session.journey));
+    if (config.challenge !== undefined) requireValue(PUZZLE_IDS.includes(config.challenge as typeof PUZZLE_IDS[number]));
+    if (board.mechanics !== undefined) {
+      const mechanics = record(board.mechanics); integer(mechanics.turns);
+      if (mechanics.stripeUsed !== undefined) requireValue(typeof mechanics.stripeUsed === 'boolean');
+      if (mechanics.boss !== undefined) this.validateBoss(record(mechanics.boss), rows, cols);
+    }
     integer(config.level, 1); integer(config.moves, 1); integer(config.targetScore, 1);
     const budget = integer(config.shuffles, 1);
     requireValue(Object.values(LevelDifficulty).includes(config.difficulty as LevelDifficulty));
@@ -208,5 +224,72 @@ export class SaveCodec implements ISaveCodec {
         if (key === 'blockers') requireValue(['crate', 'frosting', 'chocolate'].includes(String(p.kind)));
       }
     }
+    const position = (raw: unknown) => {
+      const p = record(raw); integer(p.row, 0, rows - 1); integer(p.col, 0, cols - 1);
+      return `${p.row},${p.col}`;
+    };
+    if (features.conveyors !== undefined) {
+      requireValue(Array.isArray(features.conveyors) && features.conveyors.length <= rows * cols / 2);
+      const occupied = new Set<string>();
+      for (const belt of features.conveyors as unknown[]) {
+        requireValue(Array.isArray(belt) && belt.length >= 2 && belt.length <= rows * cols);
+        for (const raw of belt as unknown[]) {
+          const key = position(raw); requireValue(!occupied.has(key)); occupied.add(key);
+        }
+      }
+    }
+    if (features.portals !== undefined) {
+      requireValue(Array.isArray(features.portals) && features.portals.length <= rows * cols / 2);
+      const occupied = new Set<string>();
+      for (const raw of features.portals as unknown[]) {
+        const portal = record(raw);
+        for (const p of [portal.entrance, portal.exit]) {
+          const key = position(p); requireValue(!occupied.has(key)); occupied.add(key);
+        }
+      }
+    }
+    if (features.boss !== undefined) this.validateBoss(record(features.boss), rows, cols);
+  }
+
+  private validateBoss(boss: Record<string, unknown>, rows: number, cols: number): void {
+    integer(boss.period, 1, 10);
+    requireValue(Array.isArray(boss.weakSpots) && boss.weakSpots.length >= 1 && boss.weakSpots.length <= rows * cols);
+    const seen = new Set<string>();
+    for (const raw of boss.weakSpots as unknown[]) {
+      const p = record(raw); integer(p.row, 0, rows - 1); integer(p.col, 0, cols - 1);
+      const key = `${p.row},${p.col}`; requireValue(!seen.has(key)); seen.add(key);
+    }
+  }
+
+  private validateTransport(terrain: Map<string, Record<string, unknown>>): void {
+    const successors = new Map<string, string>(), incoming = new Set<string>();
+    const belts = new Map<string, string>();
+    for (const [key, cell] of terrain) {
+      if (!cell.playable) continue;
+      if (cell.conveyorTo) {
+        const target = record(cell.conveyorTo), destination = `${target.row},${target.col}`;
+        requireValue(terrain.get(destination)?.playable === true);
+        belts.set(key, destination);
+      }
+      const target = cell.portalTo ? record(cell.portalTo) : { row: Number(cell.row) + 1, col: cell.col };
+      const destination = `${target.row},${target.col}`;
+      if (cell.portalTo) {
+        requireValue(terrain.get(destination)?.playable === true);
+        requireValue(terrain.get(`${Number(cell.row) + 1},${cell.col}`)?.playable !== true);
+      }
+      if (terrain.get(destination)?.playable) {
+        requireValue(!incoming.has(destination)); incoming.add(destination); successors.set(key, destination);
+      }
+    }
+    const done = new Set<string>();
+    for (const start of successors.keys()) {
+      const path = new Set<string>(); let key: string | undefined = start;
+      while (key && !done.has(key)) {
+        requireValue(!path.has(key)); path.add(key); key = successors.get(key);
+      }
+      path.forEach(p => done.add(p));
+    }
+    const beltIncoming = new Set(belts.values());
+    requireValue(beltIncoming.size === belts.size && [...belts.keys()].every(key => beltIncoming.has(key)));
   }
 }

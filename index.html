@@ -58,12 +58,14 @@
           </div>
           <p id="records-status" class="records-warning hidden" role="status"></p>
           <div id="save-status" role="status" aria-live="polite" hidden></div>
+          <div id="feature-status" class="feature-status" hidden></div>
         </footer>
       </header>
       <div id="board-viewport"></div>
       <dialog id="bonus-info-dialog" aria-labelledby="bonus-info-title">
         <div class="settings-heading"><h2 id="bonus-info-title" data-i18n="bonus">BONUS ROUND</h2><button id="bonus-info-close" class="icon-button" data-i18n-aria-label="close">✕</button></div>
         <p data-i18n="bonusExplanation"></p>
+        <button id="finish-bonus-btn" class="primary-action" data-i18n="finishBonus" data-i18n-title="finishBonusTip" disabled>Finish bonus</button>
       </dialog>
       <dialog id="settings-dialog" aria-labelledby="settings-title">
         <div class="settings-heading">
@@ -95,8 +97,13 @@
           <p data-i18n="hintShape"></p>
           <p data-i18n="hintIngredients"></p>
           <p data-i18n="hintChocolate"></p>
+          <p data-i18n="conveyorGuide"></p>
+          <p data-i18n="portalGuide"></p>
+          <p data-i18n="bossGuide"></p>
         </details>
         <div class="settings-actions">
+          <button id="play-modes-btn" data-i18n="playModes">Play modes</button>
+          <button id="recipe-book-btn" data-i18n="recipeBook">Recipe book</button>
           <button id="debug-toggle-btn" data-i18n="diagnostics">🐞 Game Diagnostics &amp; Telemetry</button>
           <button id="new-game-btn" data-i18n="newGame">New Game</button>
         </div>
@@ -117,6 +124,7 @@
             </div>
           </div>
           <button id="modal-action-btn">Play Again</button>
+          <button id="modal-modes-btn" data-i18n="playModes">Play modes</button>
         </div>
       </div>
 

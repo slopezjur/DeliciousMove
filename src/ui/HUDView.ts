@@ -28,6 +28,7 @@ export class HUDView implements IHUDView {
   private displayedScore = 0;
   private bonusActive = false;
   private lastChanceActive = false;
+  private unlimitedMoves = false;
   private animFrameId: number = 0;
 
   constructor(private readonly language: ILocalization = new LanguageService()) {
@@ -77,8 +78,10 @@ export class HUDView implements IHUDView {
     this.updateShuffles(config.shuffles);
   }
 
-  public updateMoves(moves: number, isFrozen = false, levelMoves = moves, bankMoves = 0): void {
-    this.setText(this.movesEl, levelMoves.toString());
+  public updateMoves(moves: number, isFrozen = false, levelMoves = moves, bankMoves = 0, unlimited = false): void {
+    this.unlimitedMoves = unlimited;
+    this.setText(this.movesEl, unlimited ? '∞' : levelMoves.toString());
+    this.movesEl?.setAttribute('aria-label', unlimited ? this.language.t('labUnlimited') : levelMoves.toString());
     this.setText(this.findElement('bank-moves-value'), bankMoves.toString());
     this.findElement('bank-moves')?.classList.toggle('bank-active', levelMoves === 0 && bankMoves > 0 && !isFrozen);
     if (isFrozen) {
@@ -86,7 +89,7 @@ export class HUDView implements IHUDView {
       this.movesEl?.classList.add('frozen-moves');
     } else {
       this.movesEl?.classList.remove('frozen-moves');
-      this.movesEl?.classList.toggle('low-moves', moves <= LOW_MOVES_THRESHOLD);
+      this.movesEl?.classList.toggle('low-moves', !unlimited && moves <= LOW_MOVES_THRESHOLD);
     }
   }
 
@@ -128,6 +131,7 @@ export class HUDView implements IHUDView {
   }
 
   private refreshLanguage(): void {
+    if (this.unlimitedMoves) this.movesEl?.setAttribute('aria-label', this.language.t('labUnlimited'));
     this.setBonusPhase(this.bonusActive);
     this.setText(this.difficultyBadgeEl, this.language.t(this.difficulty));
     this.setText(this.scoreEl, this.displayedScore.toLocaleString(this.language.locale));

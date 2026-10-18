@@ -1,4 +1,5 @@
 import { SpecialType, type Position, type TileColor, type TileData } from './TileTypes.ts';
+import type { BossDefinition } from './BoardMechanics.ts';
 
 export type BlockerKind = 'frosting' | 'crate' | 'chocolate';
 export type TileKind = BlockerKind | 'ingredient';
@@ -7,6 +8,9 @@ export interface CellState extends Position {
   jelly: number;
   ice: number;
   exit: boolean;
+  conveyorTo?: Position;
+  portalTo?: Position;
+  bossShielded?: boolean;
 }
 export type Objective =
   | { kind: 'score'; target: number }
@@ -25,6 +29,9 @@ export interface LevelFeatures {
   ice: (Position & { layers: number })[];
   blockers: (Position & { kind: BlockerKind; layers: number })[];
   ingredients: Position[];
+  conveyors?: Position[][];
+  portals?: { entrance: Position; exit: Position }[];
+  boss?: BossDefinition;
 }
 
 export function isCandy(tile: TileData): boolean { return tile.kind === undefined; }
