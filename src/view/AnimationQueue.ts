@@ -1,3 +1,4 @@
+import type { ITranslator } from '../i18n/ILanguageService.ts';
 import gsap from 'gsap';
 import { CELL_FALL_TIME, planSpawnMotions } from './SpawnMotion.ts';
 import { reducedMotion } from './MotionPreference.ts';
@@ -6,7 +7,7 @@ import { IAnimationSequencer, IHintAnimator } from './IAnimationSequencer.ts';
 import { CascadeStep, Position } from '../core/TileTypes.ts';
 import { ISoundService } from '../audio/ISoundService.ts';
 import { SoundManager } from '../audio/SoundManager.ts';
-import { IEffectPresenterRegistry } from './vfx/IEffectPresenter.ts';
+import { IEffectPlayback } from './vfx/IEffectPresenter.ts';
 import { EffectPresenterRegistry } from './vfx/EffectPresenterRegistry.ts';
 
 import { LanguageService, MessageKey } from '../i18n/LanguageService.ts';
@@ -17,13 +18,13 @@ const COMBO_PRAISES: MessageKey[] = ['delicious', 'tasty', 'sugarCrush', 'sweet'
 export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
   private boardView: IBoardViewAnimator;
   private soundService: ISoundService;
-  private effectPresenters: IEffectPresenterRegistry;
+  private effectPresenters: IEffectPlayback;
 
   constructor(
     boardView: IBoardViewAnimator,
     soundService: ISoundService = new SoundManager(),
-    effectPresenters: IEffectPresenterRegistry = new EffectPresenterRegistry(),
-    private readonly language = new LanguageService()
+    effectPresenters: IEffectPlayback = new EffectPresenterRegistry(),
+    private readonly language: ITranslator = new LanguageService()
   ) {
     this.boardView = boardView;
     this.soundService = soundService;
@@ -190,7 +191,7 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
         }
 
         // B. Handle normal matched tiles not part of an evolution
-        const colorBurst = step.triggeredSpecials?.some(effect => effect.effectType.includes('color_bomb')) && !reducedMotion();
+        const animateDelays = !reducedMotion();
         step.matchedTileIds.forEach((id, index) => {
           if (handledIds.has(id)) return;
           handledIds.add(id);
@@ -199,7 +200,7 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
           if (sprite) {
             gsap.killTweensOf(sprite);
             gsap.killTweensOf(sprite.scale);
-            const delay = colorBurst ? Math.min(index * 0.018, 0.3) : 0;
+            const delay = animateDelays ? this.effectPresenters.getClearDelay(step.triggeredSpecials ?? [], index) : 0;
             tl.call(() => this.boardView.vfx.createParticleBurst(sprite.x, sprite.y, sprite.tileData.color), [], delay);
 
             tl.to(
@@ -227,7 +228,7 @@ export class AnimationQueue implements IAnimationSequencer, IHintAnimator {
       // Remove sprites only after the timeline completes. Removing them inside
       // tween callbacks kills child tweens and can suppress the parent's completion.
       step.matchedTileIds.forEach((id) => this.boardView.removeTileSprite(id));
-      if (step.cellsAfter) this.boardView.applyTerrainSnapshot?.(step.cellsAfter);
+      if (step.cellsAfter) this.boardView.applyTerrainSnapshot(step.cellsAfter);
       for (const tile of step.updatedTiles ?? []) {
         const sprite = this.boardView.getTileSprite(tile.id);
         if (sprite) { sprite.tileData = { ...tile }; sprite.updateTexture(); }

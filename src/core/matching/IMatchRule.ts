@@ -21,7 +21,10 @@ export interface IMatchRule {
   evaluate(context: MatchEvaluationContext): MatchGroup[];
 }
 
-export interface IMatchRuleRegistry {
-  registerRule(rule: IMatchRule): void;
+export interface IMatchRuleReader {
   getRules(): readonly IMatchRule[];
+}
+
+export interface IMatchRuleRegistry extends IMatchRuleReader {
+  registerRule(rule: IMatchRule): void;
 }

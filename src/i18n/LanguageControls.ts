@@ -1,8 +1,8 @@
-import { LanguageService } from './LanguageService.ts';
+import type { ILanguageService } from './ILanguageService.ts';
 
 /** Updates static DOM copy and exposes a language switch without touching game state. */
 export class LanguageControls {
-  constructor(private readonly language: LanguageService, onLayoutChanged: () => void) {
+  constructor(private readonly language: ILanguageService, onLayoutChanged: () => void) {
     this.render();
     language.subscribe(() => { this.render(); onLayoutChanged(); });
     document.getElementById('language-select')?.addEventListener('change', event => {

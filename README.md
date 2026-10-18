@@ -268,21 +268,32 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
 - `Board`: grid state and tile identity.
 - `BoardFeatures`, `LevelBoardSetup`: playable-cell topology and authored object placement.
 - `TerrainResolver`: layered damage, jelly removal, and once-per-turn chocolate growth.
+  `CascadeResolver` accepts the replaceable `ITerrainResolver` contract.
 - `ObjectiveTracker`: event-based objective counters independent of scoring.
 - `BoardInitializer`: initial generation without existing line or square matches.
 - `MatchDetector` and `IMatchRule`: run scanning and prioritized match recognition.
+  Rules share `SpawnPlacement` without importing their registry. Detection depends
+  on `IMatchRuleReader`; registration is a separate capability.
 - `CascadeResolver`: match evolution, detonation, gravity, refill, and score events.
 - `LastChanceQueue`: a bounded queue of original usable special IDs, independent of
   animation and session state. `TurnCoordinator` runs it before deciding an out-of-moves loss.
 - `TileSpawner`: fills empty cells. `IRefillPolicy.beginWave()` supplies tile selection
   with wave-local state; `RandomRefillPolicy` and `BonusRefillPolicy` own phase rules.
-- `SpecialResolver`: executes handlers registered in `SpecialRegistry`.
-- `PlayerResources`: versioned life regeneration and attempt-consumable ledger, with an injectable clock.
-- `SpawnMotion`: pure segment-aware refill timing, independent of Pixi/GSAP.
+- `SpecialResolver`: executes handlers through `ISpecialRegistryReader` without
+  requiring registration methods. `SpecialRegistry` owns handler registration;
   `registerComboHandler(handler, priority)` accepts explicit precedence: lower numbers
-  run first; equal priorities retain registration order. Custom handlers default to 0,
-  and the generic color-bomb fallback runs at 1000. Use a negative priority to override
-  an existing specific handler.
+  run first, equal priorities retain registration order, and custom handlers default to 0.
+  The generic color-bomb fallback runs at 1000. Negative priorities override a specific handler.
+- `PlayerResources`: versioned life regeneration and attempt-consumable ledger, with an injectable clock.
+- `RunProgress`: checkpoint identity, model restoration, attempt reconciliation, and
+  completed-level writes through `ISaveStore`, `IRecordsStore`, and `IPlayerResources`.
+  The restoration guard prevents session notifications from overwriting restored bank/failure data.
+- `PlayerLivesController`: regeneration refreshes and input/hint availability through
+  `ILivesReader`; life rendering and modal updates do not require resource mutation methods.
+- `GameLayoutController`: viewport mounting/observation, measured canvas sizing, and
+  deferred resizing during playback. Its `dispose()` releases its observers/listeners;
+  `PlayerLivesController.dispose()` releases the life timer and visibility listener.
+- `SpawnMotion`: pure segment-aware refill timing, independent of Pixi/GSAP.
 - `GameSession` and `ILevelProgression`: score, moves, phase state, and level configuration.
 - `TurnCoordinator`: coordinates turns through `IAnimationSequencer`, passing tile IDs
   and positions. Its `ITurnSession` and `ITurnTelemetry` ports exclude run lifecycle,
@@ -295,6 +306,10 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
   or the domain board. Effect presenters receive only effect-related board/audio methods.
   Cascade payloads are independent step-local snapshots; sprites own their presentation
   data. Playback cannot move domain tiles or mutate earlier/later cascade events.
+  Animation depends on `IEffectPlayback`, with presentation and clear timing resolved
+  through the same presenter. `register(presenter, priority)` supports explicit overrides
+  with stable equal-priority ordering. A presenter's optional `clearDelay(effect, index)`
+  controls staggering; omitted timing means simultaneous clears. Reduced motion disables delays.
 - `SoundManager`: instance-owned audio context and mute state. `Game` explicitly shares
   one service across settings, modal, and animations; independent games can use separate services.
   `SoundControlsView` owns the localized mute toggle through a two-method preferences
@@ -304,12 +319,23 @@ workflow. Saves are local to the browser and origin; there is no cloud sync.
 - `GameDebugController`: optional overlay and browser debug API. Both diagnostic views
   depend on `IGameTelemetryReader`, without requiring recording methods.
 - `LanguageService` / `LanguageControls`: typed EN/ES dictionaries, preferences and DOM controls.
+  Display consumers use `ITranslator` or observable `ILocalization`; only language controls
+  require the mutable `ILanguageService` preference contract.
 - `ObjectivesView`, `TerrainView`, `FeatureAssets`: responsive counters and resolution-independent board markings.
+- `LevelProgressView`: sole owner of the aggregate goal bar and minimum-score completion marker.
+  `ObjectivesView` owns only goal cards. `HUDView` presents bonus eligibility supplied
+  explicitly by `GameSession`; completed counters never independently enter bonus play.
 - `SaveCodec` / `SaveStore`: validated, versioned checkpoints and browser-storage policy.
   The store accepts `ISaveCodec`; migration internals are not part of its dependency.
 - `SaveStatusView`: localized checkpoint indicators and warnings; receives status values
   without reading or writing storage. `RecordsView` depends only on `IRecordsReader`.
-- `Game`: constructs and connects these services, binds session events, and handles layout.
+- `Game`: composition root and session/presentation wiring. Checkpoint and attempt policy,
+  life refreshes, and responsive layout belong to the focused components above. Its dependency
+  options support replacement save, record, resource, and language services.
+
+Objective rendering, blocked-cell detection, terrain snapshot playback, and no-lives
+feedback are required presentation capabilities. Replacement views must implement them;
+optional chaining must not silently discard these parts of gameplay.
 
 Inject `IRandomSource` for core random decisions, for example
 `new Game({ random: new SeededRandomSource(42) })`.

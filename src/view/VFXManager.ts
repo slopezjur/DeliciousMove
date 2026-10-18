@@ -6,7 +6,7 @@ import { TileColor } from '../core/TileTypes.ts';
 export interface IVFXManager {
   createParticleBurst(x: number, y: number, color: TileColor, count?: number): void;
   createLaserBeam(x: number, y: number, length: number, isHorizontal: boolean): void | Promise<void>;
-  createColorBombCharge?(x: number, y: number, targets: { x: number; y: number }[]): Promise<void>;
+  createColorBombCharge(x: number, y: number, targets: { x: number; y: number }[]): Promise<void>;
   createShockwave(x: number, y: number, radius: number): void;
   createFloatingText(x: number, y: number, message: string, color?: number): void;
   screenShake(target: Container, intensity?: number): void;

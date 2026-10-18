@@ -1,8 +1,10 @@
+import type { ILocalization } from '../i18n/ILanguageService.ts';
 import { IHUDView } from './IHUDView.ts';
 import { LevelConfig, LevelDifficulty } from '../core/LevelProgression.ts';
 
 import { LanguageService } from '../i18n/LanguageService.ts';
 import { ObjectivesView } from './ObjectivesView.ts';
+import { LevelProgressView } from './LevelProgressView.ts';
 import { ObjectiveProgress } from '../core/BoardFeatures.ts';
 
 const LOW_MOVES_THRESHOLD = 5;
@@ -16,8 +18,8 @@ export class HUDView implements IHUDView {
   private shufflesEl: HTMLElement | null;
   private difficultyBadgeEl: HTMLElement | null;
   private bonusPhaseBadgeEl: HTMLElement | null;
-  private progressFill: HTMLElement | null;
   private readonly objectivesView: ObjectivesView;
+  private readonly progressView = new LevelProgressView();
 
   private currentScore = 0;
   private globalScore = 0;
@@ -28,7 +30,7 @@ export class HUDView implements IHUDView {
   private lastChanceActive = false;
   private animFrameId: number = 0;
 
-  constructor(private readonly language = new LanguageService()) {
+  constructor(private readonly language: ILocalization = new LanguageService()) {
     this.objectivesView = new ObjectivesView(language);
     language.subscribe(() => this.refreshLanguage());
 
@@ -40,7 +42,6 @@ export class HUDView implements IHUDView {
     this.shufflesEl = this.findElement('shuffles-value');
     this.difficultyBadgeEl = this.findElement('difficulty-badge');
     this.bonusPhaseBadgeEl = this.findElement('bonus-phase-indicator');
-    this.progressFill = this.findElement('progress-fill');
     const bonusDialog = this.findElement('bonus-info-dialog') as HTMLDialogElement | null;
     this.bonusPhaseBadgeEl?.addEventListener('click', () => bonusDialog?.showModal());
     this.findElement('bonus-info-close')?.addEventListener('click', () => bonusDialog?.close());
@@ -50,6 +51,7 @@ export class HUDView implements IHUDView {
   public initLevel(config: LevelConfig, bonusMoves: number = 0, globalScore: number = 0): void {
     this.setLastChance(false);
     this.objectivesView.setLevel(config);
+    this.progressView.setLevel(config);
     this.difficulty = config.difficulty;
     this.globalScore = globalScore;
     this.currentScore = 0;
@@ -60,10 +62,6 @@ export class HUDView implements IHUDView {
     this.setText(this.globalScoreEl, globalScore.toLocaleString(this.language.locale));
     this.setText(this.levelEl, config.level.toString());
     this.setText(this.targetEl, config.targetScore.toLocaleString(this.language.locale));
-    if (this.progressFill) {
-      this.progressFill.style.width = '0%';
-      this.progressFill.classList.remove('bonus-phase-glow');
-    }
 
     if (this.bonusPhaseBadgeEl) {
       this.bonusPhaseBadgeEl.classList.add('hidden');
@@ -75,7 +73,7 @@ export class HUDView implements IHUDView {
     }
 
     this.updateMoves(config.moves + bonusMoves, false, config.moves, bonusMoves);
-    this.showBonus(false);
+    this.setBonusPhase(false);
     this.updateShuffles(config.shuffles);
   }
 
@@ -99,24 +97,23 @@ export class HUDView implements IHUDView {
 
   public updateObjectives(progress: ObjectiveProgress[]): void {
     this.objectivesView.update(progress);
-    this.showBonus(progress.length > 0 && progress.every(p => p.current >= p.objective.target));
+    this.progressView.update(progress);
   }
 
-  private showBonus(active: boolean): void {
+  public setBonusPhase(active: boolean): void {
     this.bonusActive = active;
     this.bonusPhaseBadgeEl?.classList.toggle('hidden', !active || this.lastChanceActive);
-    this.progressFill?.classList.toggle('bonus-phase-glow', active);
+    this.progressView.setBonusPhase(active && !this.lastChanceActive);
     if (active) {
       this.movesEl?.classList.remove('low-moves');
       this.movesEl?.classList.add('frozen-moves');
-      this.progressFill?.classList.add('bonus-phase-glow');
     }
   }
 
   public setLastChance(active: boolean): void {
     this.lastChanceActive = active;
     this.findElement('last-chance-indicator')?.classList.toggle('hidden', !active);
-    this.showBonus(this.bonusActive);
+    this.setBonusPhase(this.bonusActive);
   }
 
   public addScore(amount: number, globalScore?: number, isBonusPhase?: boolean): void {
@@ -126,15 +123,12 @@ export class HUDView implements IHUDView {
       this.setText(this.globalScoreEl, globalScore.toLocaleString(this.language.locale));
     }
     this.animateScore();
-    const progress = Math.min(100, (this.currentScore / this.targetScore) * 100);
-    if (this.progressFill && !this.objectivesView.hasVariedObjectives()) this.progressFill.style.width = `${progress}%`;
-
-    const qualified = isBonusPhase ?? (!this.objectivesView.hasVariedObjectives() && this.currentScore >= this.targetScore);
-    this.showBonus(qualified);
+    this.progressView.setScore(this.currentScore);
+    if (isBonusPhase !== undefined) this.setBonusPhase(isBonusPhase);
   }
 
   private refreshLanguage(): void {
-    this.showBonus(this.bonusActive);
+    this.setBonusPhase(this.bonusActive);
     this.setText(this.difficultyBadgeEl, this.language.t(this.difficulty));
     this.setText(this.scoreEl, this.displayedScore.toLocaleString(this.language.locale));
     this.setText(this.globalScoreEl, this.globalScore.toLocaleString(this.language.locale));

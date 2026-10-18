@@ -10,8 +10,12 @@ export interface IRecordsReader {
   getSnapshot(): PersonalRecords;
 }
 
+export interface IRecordsStore extends IRecordsReader {
+  recordCompletedLevel(session: SessionSaveState): void;
+}
+
 /** Separate lifetime records from the replaceable run checkpoint. Never writes mid-level. */
-export class RecordsStore implements IRecordsReader {
+export class RecordsStore implements IRecordsStore {
   private records: PersonalRecords = { bestLevel: 0, bestScore: 0 };
   public status: RecordsStatus = 'available';
 

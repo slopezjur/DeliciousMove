@@ -79,8 +79,13 @@ independent copies, not references to mutable game objects.
 
 `Board`, `GameSession`, and `IStatefulRandomSource` export/restore domain snapshots.
 `SaveCodec` validates and migrates them through the `ISaveCodec` contract. `SaveStore` handles browser storage,
-checkpoint policy and preservation. `Game` saves only after completed turn playback
-and reconstructs presentation without triggering level initialization on restore.
+checkpoint policy and preservation. `RunProgress` coordinates checkpoints, completed-level
+records, and attempt identity through `ISaveStore`, `IRecordsStore`, and `IPlayerResources`.
+`Game` requests a save only after completed turn playback and reconstructs presentation
+without triggering level initialization on restore. During recovery, `RunProgress` suppresses
+bank/attempt writes caused by session notifications, reconciles the existing ledger, and only
+then starts a ready attempt. Failed saves retain the old checkpoint identity and attempt ledger.
+This separation changes neither the serialized format nor the schema/rules versions.
 
 Validation rejects malformed JSON, duplicate IDs/cells, incomplete playable grids,
 tiles in gaps, unknown tile types, invalid durability/counters/states, inconsistent

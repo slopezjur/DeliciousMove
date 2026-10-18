@@ -8,10 +8,48 @@ import { SpecialRegistry } from '../src/core/specials/SpecialRegistry.ts';
 import { ISpecialComboHandler } from '../src/core/specials/ISpecialHandler.ts';
 import { SoundManager } from '../src/audio/SoundManager.ts';
 import { GameDebugController } from '../src/debug/GameDebugController.ts';
+import { MatchDetector } from '../src/core/MatchDetector.ts';
+import { SpecialResolver } from '../src/core/SpecialResolver.ts';
+import { CascadeResolver } from '../src/core/CascadeResolver.ts';
+import { ITerrainResolver } from '../src/core/TerrainResolver.ts';
+import { LivesView } from '../src/ui/LivesView.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Extensible policies and isolated dependencies', () => {
+  it('detects matches with a registry that exposes no registration operations', () => {
+    const board = new Board(3, 3);
+    board.createTile(0, 0, TileColor.Blue); board.createTile(0, 1, TileColor.Blue); board.createTile(0, 2, TileColor.Blue);
+    const rules = new (class {
+      getRules() { return [{ priority: 1, evaluate: () => [{ color: TileColor.Blue,
+        tiles: [board.get(0, 0)!, board.get(0, 1)!, board.get(0, 2)!] }] }]; }
+    })();
+    expect(new MatchDetector(rules).detectMatches(board)[0].tiles).toHaveLength(3);
+  });
+
+  it('runs effects with a read-only special registry and an independent terrain implementation', () => {
+    const board = new Board(3, 3), source = board.createTile(1, 1, TileColor.Blue, SpecialType.Wrapped);
+    const effects = new SpecialResolver({ getEffectHandler: () => ({ supportedType: SpecialType.Wrapped,
+      execute: () => ({ sourceTile: source, effectType: source.special, affectedTileIds: [source.id] }) }),
+      findComboHandler: () => undefined });
+    const terrain: ITerrainResolver = { applyHits: vi.fn(() => ({ objectiveEvents: [], updatedTiles: [] })),
+      spread: vi.fn(() => null) };
+    const resolver = new CascadeResolver(undefined, undefined, { refillEmptySlots: () => [] }, undefined, effects, terrain);
+    const result = resolver.resolveActivation(board, source);
+    expect(result.valid).toBe(true);
+    expect(result.steps[0].matchedTileIds).toEqual([source.id]);
+    expect(terrain.applyHits).toHaveBeenCalledOnce();
+    expect(terrain.spread).toHaveBeenCalledOnce();
+  });
+
+  it('renders a countdown through a translator with no storage or language-preference methods', () => {
+    const timer = { textContent: '' };
+    vi.stubGlobal('document', { getElementById: (id: string) => id === 'lives-timer' ? timer : null });
+    new LivesView({ locale: 'en', t: (_key, params) => `Remaining: ${params?.time}` })
+      .render({ lives: 1, maximum: 5, secondsToNext: 61 }, 'available');
+    expect(timer.textContent).toBe('Remaining: 1:01');
+  });
+
   it('selects a newly registered color-bomb combo ahead of the generic fallback', () => {
     const board = new Board(2, 2);
     const bomb = board.createTile(0, 0, TileColor.Red, SpecialType.ColorBomb);

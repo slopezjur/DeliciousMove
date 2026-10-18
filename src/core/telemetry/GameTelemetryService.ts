@@ -16,7 +16,7 @@ export interface GameTelemetryDependencies {
   board: Board;
   session: Pick<IGameSession, 'getLevelConfig' | 'getObjectives' | 'getLevel' | 'getState'
     | 'getScore' | 'getTargetScore' | 'getMovesLeft' | 'getAccumulatedMoves' | 'getShufflesLeft'>;
-  deadlockResolver: IDeadlockResolver;
+  deadlockResolver: Pick<IDeadlockResolver, 'findPossibleMoves'>;
   isInputLocked: () => boolean;
 }
 

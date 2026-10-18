@@ -1,4 +1,5 @@
 import { IStorage } from '../persistence/Storage.ts';
+import type { ILanguageService } from './ILanguageService.ts';
 
 export type Locale = 'en' | 'es';
 export const LANGUAGE_KEY = 'deliciousmove.language';
@@ -125,7 +126,7 @@ const es: Record<MessageKey, string> = {
   save_recovered: 'Copia restaurada. Guardado pausado para conservar el original dañado.',
 };
 
-export class LanguageService {
+export class LanguageService implements ILanguageService {
   private listeners = new Set<() => void>();
   public locale: Locale;
 

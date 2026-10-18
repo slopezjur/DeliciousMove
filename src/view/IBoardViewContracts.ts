@@ -20,12 +20,10 @@ export interface IPointerEventSource {
  * Encapsulates spatial querying so input handlers never inspect internal board models directly (LoD).
  */
 export interface IBoardCoordinateMapper {
-  gridToLocal(row: number, col: number): { x: number; y: number };
   localToGrid(localX: number, localY: number): Position | null;
   setTileSelected(pos: Position, selected: boolean): void;
   isSpecialTile(pos: Position): boolean;
-  isRock(pos: Position): boolean;
-  isBlocked?(pos: Position): boolean;
+  isBlocked(pos: Position): boolean;
   isValidPosition(pos: Position): boolean;
   isAdjacent(posA: Position, posB: Position): boolean;
 }
@@ -48,7 +46,7 @@ export interface IBoardViewAnimator {
   getTileSpritesMap(): ReadonlyMap<number, ITileVisual>;
   screenShake(intensity?: number): void;
   syncSpritesWithBoard(): void;
-  applyTerrainSnapshot?(cells: import('../core/BoardFeatures.ts').CellState[]): void;
+  applyTerrainSnapshot(cells: import('../core/BoardFeatures.ts').CellState[]): void;
 }
 
 /**

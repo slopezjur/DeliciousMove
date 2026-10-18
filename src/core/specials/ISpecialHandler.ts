@@ -56,10 +56,13 @@ export interface ISpecialComboHandler {
   ): { effects: SpecialTriggerEffect[]; secondaryDetonations: TileData[] };
 }
 
-export interface ISpecialRegistry {
+export interface ISpecialRegistryReader {
+  getEffectHandler(type: SpecialType): ISpecialEffectHandler | undefined;
+  findComboHandler(a: TileData, b: TileData): ISpecialComboHandler | undefined;
+}
+
+export interface ISpecialRegistry extends ISpecialRegistryReader {
   registerEffectHandler(handler: ISpecialEffectHandler): void;
   /** Lower priorities run first; equal priorities retain registration order. */
   registerComboHandler(handler: ISpecialComboHandler, priority?: number): void;
-  getEffectHandler(type: SpecialType): ISpecialEffectHandler | undefined;
-  findComboHandler(a: TileData, b: TileData): ISpecialComboHandler | undefined;
 }

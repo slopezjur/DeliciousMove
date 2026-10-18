@@ -4,13 +4,44 @@ import { Board } from '../src/core/Board.ts';
 import { SpecialType, TileColor } from '../src/core/TileTypes.ts';
 import { BoardView } from '../src/view/BoardView.ts';
 import { SoundManager } from '../src/audio/SoundManager.ts';
-import { ColorBombPresenter, StripedBeamPresenter } from '../src/view/vfx/EffectPresenterRegistry.ts';
+import { ColorBombPresenter, StripedBeamPresenter, EffectPresenterRegistry } from '../src/view/vfx/EffectPresenterRegistry.ts';
 import { VFXManager } from '../src/view/VFXManager.ts';
 import { Container } from 'pixi.js';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('special effect timing', () => {
+  it('uses the same override for effect playback and candy-clear timing', async () => {
+    const board = new Board(), source = board.createTile(0, 0, TileColor.Red, SpecialType.ColorBomb);
+    const view = new BoardView(board), present = vi.fn();
+    const registry = new EffectPresenterRegistry();
+    registry.register({ canPresent: type => type === SpecialType.ColorBomb, present,
+      clearDelay: (_effect, index) => index * 0.05 }, -1);
+    const effect = { sourceTile: source, affectedTileIds: [source.id], effectType: source.special };
+    try {
+      await registry.present(effect, { boardView: view, sound: new SoundManager(), position: { x: 0, y: 0 } });
+      expect(present).toHaveBeenCalledOnce();
+      expect(registry.getClearDelay([effect], 3)).toBeCloseTo(0.15);
+      expect(registry.getClearDelay([], 3)).toBe(0);
+    } finally { view.destroy({ children: true }); }
+  });
+
+  it('retains default color-bomb staggering and stable registration order', async () => {
+    const source = { id: 1, row: 0, col: 0, color: TileColor.Red, special: SpecialType.ColorBomb };
+    const effect = { sourceTile: source, affectedTileIds: [], effectType: source.special };
+    const defaults = new EffectPresenterRegistry();
+    expect(defaults.getClearDelay([effect], 1)).toBe(0.018);
+    expect(defaults.getClearDelay([effect], 100)).toBe(0.3);
+    const first = vi.fn(), second = vi.fn(), registry = new EffectPresenterRegistry([]);
+    registry.register({ canPresent: () => true, present: first });
+    registry.register({ canPresent: () => true, present: second });
+    const view = new BoardView(new Board());
+    try {
+      await registry.present(effect, { boardView: view, sound: new SoundManager(), position: { x: 0, y: 0 } });
+      expect(first).toHaveBeenCalledOnce(); expect(second).not.toHaveBeenCalled();
+    } finally { view.destroy({ children: true }); }
+  });
+
   it('awaits the entire vertical beam, centered across the column even from an edge source', async () => {
     const board = new Board(), source = board.createTile(7, 3, TileColor.Red, SpecialType.StripedVertical);
     const view = new BoardView(board); view.initFromBoard(); view.updateLayout(600, 600);

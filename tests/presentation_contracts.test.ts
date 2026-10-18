@@ -76,9 +76,9 @@ describe('segregated presentation contracts', () => {
       gridToLocal: (row, col) => ({ x: col * 64, y: row * 64 }),
       getTileSprite: id => tiles.get(id), getTileSpritesMap: () => tiles,
       addTileSprite: data => { const visual = tile(data.id, data.col); tiles.set(data.id, visual); return visual; },
-      removeTileSprite: id => { tiles.delete(id); }, screenShake: vi.fn(), syncSpritesWithBoard: vi.fn(),
+      removeTileSprite: id => { tiles.delete(id); }, screenShake: vi.fn(), syncSpritesWithBoard: vi.fn(), applyTerrainSnapshot: vi.fn(),
       vfx: { createParticleBurst: vi.fn(), createLaserBeam: vi.fn(), createShockwave: vi.fn(),
-        createFloatingText: vi.fn(), screenShake: vi.fn(), launchAirplane: async () => {} },
+        createFloatingText: vi.fn(), screenShake: vi.fn(), launchAirplane: async () => {}, createColorBombCharge: async () => {} },
     };
     const speed = gsap.globalTimeline.timeScale();
     gsap.globalTimeline.timeScale(30);

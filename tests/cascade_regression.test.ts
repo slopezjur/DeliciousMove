@@ -313,6 +313,7 @@ describe('Cascade regressions', () => {
         getTileSpritesMap: vi.fn().mockReturnValue(new Map()),
         screenShake: vi.fn(),
         syncSpritesWithBoard: syncMock,
+        applyTerrainSnapshot: vi.fn(),
       };
 
       const queue = new AnimationQueue(fakeBoardView);

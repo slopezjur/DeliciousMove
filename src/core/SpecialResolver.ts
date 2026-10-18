@@ -2,7 +2,7 @@ import { Board } from './Board.ts';
 import { TileData, Position, SpecialType, TileColor } from './TileTypes.ts';
 import { SpecialRegistry } from './specials/SpecialRegistry.ts';
 import { isCandy } from './BoardFeatures.ts';
-import type { SpecialTriggerEffect, ISpecialRegistry } from './specials/ISpecialHandler.ts';
+import type { SpecialTriggerEffect, ISpecialRegistryReader } from './specials/ISpecialHandler.ts';
 
 export type { SpecialTriggerEffect };
 
@@ -38,9 +38,9 @@ export interface ISpecialResolver {
 }
 
 export class SpecialResolver implements ISpecialResolver {
-  private readonly registry: ISpecialRegistry;
+  private readonly registry: ISpecialRegistryReader;
 
-  constructor(registry: ISpecialRegistry = new SpecialRegistry()) {
+  constructor(registry: ISpecialRegistryReader = new SpecialRegistry()) {
     this.registry = registry;
   }
 

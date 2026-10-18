@@ -5,6 +5,7 @@ import { HUDView } from '../src/ui/HUDView.ts';
 import { LanguageService } from '../src/i18n/LanguageService.ts';
 import { SoundManager } from '../src/audio/SoundManager.ts';
 import { GameOverReason } from '../src/core/GameSession.ts';
+import { LevelDifficulty } from '../src/core/LevelProgression.ts';
 
 function dom(ids: string[]) {
   const elements = new Map(ids.map(id => {
@@ -77,6 +78,32 @@ it('keeps last chance visible through objective completion, then restores the bo
   expect(el('last-chance-indicator').classList.contains('hidden')).toBe(false);
   expect(el('bonus-phase-indicator').classList.contains('hidden')).toBe(true);
   hud.setLastChance(false);
+  hud.setBonusPhase(true);
   expect(el('last-chance-indicator').classList.contains('hidden')).toBe(true);
   expect(el('bonus-phase-indicator').classList.contains('hidden')).toBe(false);
+});
+
+it('renders completed counters without inferring bonus eligibility independently of the session', () => {
+  const el = dom(['bonus-phase-indicator', 'progress-fill']);
+  const hud = new HUDView();
+  hud.initLevel({ level: 1, moves: 1, shuffles: 1, targetScore: 100, difficulty: LevelDifficulty.Easy });
+  hud.addScore(100);
+  hud.updateObjectives([{ objective: { kind: 'score', target: 100 }, current: 100 }]);
+  expect(el('bonus-phase-indicator').classList.contains('hidden')).toBe(true);
+  hud.setBonusPhase(true);
+  expect(el('bonus-phase-indicator').classList.contains('hidden')).toBe(false);
+  expect(el('progress-fill').classList.contains('bonus-phase-glow')).toBe(true);
+  hud.setBonusPhase(false);
+  expect(el('bonus-phase-indicator').classList.contains('hidden')).toBe(true);
+});
+
+it('aggregates score and feature progress regardless of score/objective update order', () => {
+  const el = dom(['progress-fill']);
+  const hud = new HUDView();
+  hud.initLevel({ level: 3, moves: 15, shuffles: 2, targetScore: 100, difficulty: LevelDifficulty.Hard,
+    objectives: [{ kind: 'score', target: 100 }, { kind: 'jelly', target: 10 }] });
+  hud.updateObjectives([{ objective: { kind: 'score', target: 100 }, current: 50 },
+    { objective: { kind: 'jelly', target: 10 }, current: 2 }]);
+  hud.addScore(100);
+  expect(el('progress-fill').style).toMatchObject({ width: '60%' });
 });

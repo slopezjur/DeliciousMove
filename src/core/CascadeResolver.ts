@@ -1,7 +1,7 @@
 import { Board } from './Board.ts';
 import { IMatchDetector, MatchDetector } from './MatchDetector.ts';
 import { isProductiveColorSwap } from './matching/MatchEligibility.ts';
-import { TerrainResolver } from './TerrainResolver.ts';
+import { ITerrainResolver, TerrainResolver } from './TerrainResolver.ts';
 import {
   ISpecialResolver,
   SpecialResolver,
@@ -50,7 +50,7 @@ export class CascadeResolver implements ICascadeResolver {
     tileSpawner: ITileSpawner = new TileSpawner(),
     matchDetector: IMatchDetector = new MatchDetector(),
     specialResolver: ISpecialResolver = new SpecialResolver(),
-    private readonly terrain: TerrainResolver = new TerrainResolver()
+    private readonly terrain: ITerrainResolver = new TerrainResolver()
   ) {
     this.scoreCalculator = scoreCalculator;
     this.gravitySystem = gravitySystem;

@@ -1,14 +1,17 @@
 import { LanguageService } from './i18n/LanguageService.ts';
+import type { ILanguageService } from './i18n/ILanguageService.ts';
 import { LanguageControls } from './i18n/LanguageControls.ts';
 import { IStorage, BrowserStorage } from './persistence/Storage.ts';
-import { SaveStore } from './persistence/SaveStore.ts';
-import { RecordsStore } from './persistence/RecordsStore.ts';
+import { ISaveStore, SaveStore } from './persistence/SaveStore.ts';
+import { IRecordsStore, RecordsStore } from './persistence/RecordsStore.ts';
 import { RecordsView } from './ui/RecordsView.ts';
 import { SaveStatusView } from './ui/SaveStatusView.ts';
 import { SoundControlsView } from './ui/SoundControlsView.ts';
-import { PlayerResources } from './persistence/PlayerResources.ts';
+import { IPlayerResources, PlayerResources } from './persistence/PlayerResources.ts';
 import { LivesView } from './ui/LivesView.ts';
-import { GameSave, SAVE_SCHEMA_VERSION, GAME_RULES_VERSION } from './persistence/SaveCodec.ts';
+import { RunProgress } from './persistence/RunProgress.ts';
+import { GameLayoutController } from './view/GameLayoutController.ts';
+import { PlayerLivesController } from './PlayerLivesController.ts';
 import { Application } from 'pixi.js';
 import { Board } from './core/Board.ts';
 import { BoardInitializer, IBoardInitializer } from './core/BoardInitializer.ts';
@@ -57,7 +60,10 @@ export interface GameDependencies {
   now?: () => number;
   app?: Application;
   storage?: IStorage;
-  language?: LanguageService;
+  language?: ILanguageService;
+  saves?: ISaveStore;
+  records?: IRecordsStore;
+  resources?: IPlayerResources;
   random?: IRandomSource;
   board?: Board;
   boardInitializer?: IBoardInitializer;
@@ -83,21 +89,16 @@ export interface GameDependencies {
  */
 export class Game {
   private readonly initialLevel: number;
-  private readonly language: LanguageService;
-  private readonly saves: SaveStore;
+  private readonly language: ILanguageService;
+  private readonly saves: ISaveStore;
   private readonly saveStatusView: SaveStatusView;
-  private readonly records: RecordsStore;
   private readonly recordsView: RecordsView;
-  private readonly resources: PlayerResources;
-  private readonly livesView: LivesView;
-  private checkpoint = 'new';
-  private restoringAttempt = false;
+  private readonly resources: IPlayerResources;
+  private readonly lives: PlayerLivesController;
+  private readonly progress: RunProgress;
+  private readonly layout: GameLayoutController;
   private readonly random: IRandomSource;
-  private readonly savedRun: GameSave | null;
   private turnInFlight = false;
-  private layoutPending = false;
-  private boardViewport: HTMLElement | null = null;
-  private layoutObserver?: ResizeObserver;
   private modalTimer?: ReturnType<typeof setTimeout>;
   private readonly app: Application;
   private readonly board: Board;
@@ -117,24 +118,22 @@ export class Game {
     this.initialLevel = deps.initialLevel ?? 1;
     const storage = deps.storage ?? new BrowserStorage();
     this.language = deps.language ?? new LanguageService(storage, typeof navigator === 'undefined' ? 'en' : navigator.language);
-    this.saves = new SaveStore(storage);
+    this.saves = deps.saves ?? new SaveStore(storage);
     this.saveStatusView = new SaveStatusView(this.language);
-    this.savedRun = this.saves.load();
-    this.checkpoint = this.savedRun ? `${this.savedRun.savedAt}:${this.savedRun.session.config.level}` : 'new';
-    this.resources = new PlayerResources(storage, deps.now);
-    this.livesView = new LivesView(this.language);
-    this.records = new RecordsStore(storage);
-    if (this.savedRun) this.records.recordCompletedLevel(this.savedRun.session);
-    this.recordsView = new RecordsView(this.records, this.language);
+    this.resources = deps.resources ?? new PlayerResources(storage, deps.now);
+    const records = deps.records ?? new RecordsStore(storage);
+    this.progress = new RunProgress(this.saves, records, this.resources, deps.now);
+    this.recordsView = new RecordsView(records, this.language);
     const random = deps.random ?? new SeededRandomSource(new MathRandomSource().nextInt(0x100000000));
     this.random = random;
     const sound = deps.sound ?? new SoundManager();
     new SoundControlsView(sound, this.language);
 
     this.app = deps.app ?? new Application();
-    this.board = deps.board ?? new Board(this.savedRun?.board.rows ?? 8, this.savedRun?.board.cols ?? 8);
+    this.board = deps.board ?? new Board(this.progress.savedRun?.board.rows ?? 8, this.progress.savedRun?.board.cols ?? 8);
     this.boardInitializer = deps.boardInitializer ?? new BoardInitializer(random);
     this.boardView = deps.boardView ?? new BoardView(this.board);
+    this.layout = new GameLayoutController(this.app, this.boardView, () => this.turnInFlight);
     this.session = deps.session ?? new GameSession(new InfiniteLevelProgression());
     this.modal = deps.modal ?? new GameModalView(this.onModalAction.bind(this), sound, this.language);
     this.hud = deps.hud ?? new HUDView(this.language);
@@ -161,6 +160,9 @@ export class Game {
         this.onActivateTile.bind(this),
         () => this.idleHintController.resetTimer()
       );
+
+    this.lives = new PlayerLivesController(this.resources, this.session, new LivesView(this.language),
+      this.modal, this.inputController, this.idleHintController, () => this.turnInFlight);
 
     this.telemetry =
       deps.telemetry ??
@@ -215,17 +217,7 @@ export class Game {
       preference: 'webgl',
     });
 
-    this.boardViewport = document.getElementById('board-viewport');
-    (this.boardViewport ?? containerElement).appendChild(this.app.canvas);
-    this.app.stage.addChild(this.boardView.displayObject);
-
-    window.addEventListener('resize', this.onResize.bind(this));
-    document.addEventListener('fullscreenchange', this.onResize.bind(this));
-    window.visualViewport?.addEventListener('resize', this.onResize.bind(this));
-    if (this.boardViewport && typeof ResizeObserver !== 'undefined') {
-      this.layoutObserver = new ResizeObserver(() => this.onResize());
-      this.layoutObserver.observe(this.boardViewport);
-    }
+    this.layout.attach(containerElement);
 
     new SettingsView();
     new LanguageControls(this.language, () => this.onResize());
@@ -234,30 +226,10 @@ export class Game {
     document.getElementById('new-game-btn')?.addEventListener('click', () => {
       if (!this.turnInFlight && window.confirm(this.language.t('newGameConfirm'))) this.startNewGame();
     });
-    const attempt = this.resources.getAttempt(this.checkpoint);
-    this.restoringAttempt = true;
-    const restored = this.restoreProgress();
-    const resumingLevel = this.savedRun
-      ? this.savedRun.session.config.level + (this.savedRun.session.state === GameState.Victory ? 1 : 0)
-      : this.initialLevel;
-    if (attempt && attempt.level === resumingLevel) {
-      if (restored && this.savedRun?.session.state !== GameState.Victory) {
-        this.session.reconcileBank(attempt.bank);
-      } else {
-        this.session.startLevel(attempt.level, attempt.bank);
-      }
-      if (attempt.failed) this.session.failAttempt(attempt.failed);
-      else if (this.session.getState() === GameState.Ready) this.session.onTurnCompleted();
-    } else if (!restored) {
-      if (this.initialLevel === 1) this.session.restart();
-      else this.session.startLevel(this.initialLevel);
-    }
-    this.restoringAttempt = false;
-    if (this.session.getState() === GameState.Ready) this.beginAttempt();
+    this.progress.resume(this.session, this.initialLevel, () => this.restoreProgress());
     this.refreshLives();
-    if (!this.resources.snapshot().lives && this.session.getState() === GameState.Ready) this.modal.showNoLives?.();
-    window.setInterval?.(() => this.refreshLives(), 1000);
-    document.addEventListener('visibilitychange', () => this.refreshLives());
+    if (!this.resources.snapshot().lives && this.session.getState() === GameState.Ready) this.modal.showNoLives();
+    this.lives.start();
     this.renderSaveStatus();
     requestAnimationFrame(() => this.onResize());
   }
@@ -266,12 +238,10 @@ export class Game {
   public startNewGame(): void {
     if (this.turnInFlight) return;
     clearTimeout(this.modalTimer);
-    this.saves.beginNewRun();
-    this.checkpoint = 'new';
-    this.resources.clearAttempt();
+    this.progress.beginNewRun();
     this.session.restart();
     this.refreshLives();
-    if (!this.resources.snapshot().lives) this.modal.showNoLives?.();
+    if (!this.resources.snapshot().lives) this.modal.showNoLives();
   }
 
   /** Force board reshuffle (telemetry/debug recovery). */
@@ -286,9 +256,12 @@ export class Game {
 
   private bindSessionEvents(): void {
     this.session.addListener({
-      onObjectivesUpdated: (objectives) => this.hud.updateObjectives?.(objectives),
+      onObjectivesUpdated: (objectives) => {
+        this.hud.updateObjectives(objectives);
+        this.hud.setBonusPhase(this.session.isBonusPhase());
+      },
       onLevelStarted: (config) => {
-        if (!this.restoringAttempt) this.beginAttempt();
+        this.progress.beginAttempt(this.session);
         this.telemetry.recordStateTransition('level_start', `Level ${config.level} (${config.difficulty})`);
         this.modal.hide();
         this.hud.initLevel(config, this.session.getAccumulatedMoves(), this.session.getGlobalScore());
@@ -302,11 +275,12 @@ export class Game {
       },
       onMovesUpdated: (moves, isFrozen) => {
         this.hud.updateMoves(moves, isFrozen, this.session.getLevelMovesLeft(), this.session.getAccumulatedMoves());
-        if (!this.restoringAttempt) this.resources.spendBank(this.checkpoint, this.session.getLevel(), this.session.getAccumulatedMoves());
+        this.progress.recordBank(this.session);
       },
       onShufflesUpdated: (shuffles) => this.hud.updateShuffles(shuffles),
       onStateChanged: (state, snapshot) => {
         this.hud.setLastChance(state === GameState.LastChance);
+        this.hud.setBonusPhase(this.session.isBonusPhase());
         if (state === GameState.Victory) {
           this.idleHintController.stop();
           this.telemetry.recordStateTransition('victory', `Score: ${snapshot.score}`);
@@ -317,7 +291,7 @@ export class Game {
             END_OF_TURN_MODAL_DELAY_MS
           );
         } else if (state === GameState.GameOver) {
-          this.resources.fail(this.checkpoint, snapshot.level, this.session.getAccumulatedMoves(), snapshot.reason!);
+          this.progress.fail(this.session, snapshot.reason!);
           this.refreshLives();
           this.idleHintController.stop();
           this.telemetry.recordStateTransition('game_over', `Reason: ${snapshot.reason}`);
@@ -354,7 +328,7 @@ export class Game {
 
   /** A failed attempt retries this level; only explicit New Game resets the ladder. */
   private onModalAction(): void {
-    if (this.resources.snapshot().lives <= 0) { this.modal.showNoLives?.(); return; }
+    if (this.resources.snapshot().lives <= 0) { this.modal.showNoLives(); return; }
     if (this.session.getState() === GameState.Victory) {
       this.session.advanceLevel();
     } else if (this.session.getState() === GameState.GameOver) this.session.retryLevel();
@@ -362,20 +336,7 @@ export class Game {
     this.refreshLives();
   }
 
-  private onResize(): void {
-    if (this.turnInFlight) { this.layoutPending = true; return; }
-    this.layoutPending = false;
-    const width = this.boardViewport?.clientWidth ?? window.innerWidth;
-    const height = this.boardViewport?.clientHeight ?? window.innerHeight;
-    if (width <= 0 || height <= 0) return;
-
-    // CSS owns placement; Pixi owns only the measured board region.
-    if (this.app.renderer) {
-      this.app.renderer.resize(width, height);
-    }
-
-    this.boardView.updateLayout(width, height);
-  }
+  private onResize(): void { this.layout.resize(); }
 
   private async runTurn(action: () => Promise<boolean>): Promise<boolean> {
     if (this.turnInFlight) return false;
@@ -390,7 +351,7 @@ export class Game {
       return played;
     } finally {
       this.turnInFlight = false;
-      if (this.layoutPending) this.onResize();
+      this.layout.flush();
       if (newGameButton) newGameButton.disabled = false;
       this.debug.refresh();
       this.refreshLives();
@@ -407,41 +368,19 @@ export class Game {
 
   private saveProgress(): void {
     if (this.session.getState() !== GameState.Victory) return;
-    this.records.recordCompletedLevel(this.session.exportState());
+    this.progress.saveVictory(this.board, this.random, this.session);
     this.recordsView.render();
-    if (!isStatefulRandomSource(this.random)) {
-      this.saves.suspend();
-    } else {
-      const savedAt = new Date().toISOString();
-      const saved = this.saves.save({
-        schemaVersion: SAVE_SCHEMA_VERSION, rulesVersion: GAME_RULES_VERSION,
-        savedAt, board: this.board.getSnapshot(),
-        session: this.session.exportState(), random: this.random.getSnapshot(),
-      });
-      if (saved) {
-        this.checkpoint = `${savedAt}:${this.session.getLevel()}`;
-        this.resources.clearAttempt();
-      }
-    }
     this.renderSaveStatus();
   }
 
   private restoreProgress(): boolean {
-    const save = this.savedRun;
-    if (!save) return false;
-    if (!isStatefulRandomSource(this.random) || save.board.rows !== this.board.rows
-      || save.board.cols !== this.board.cols) {
-      this.saves.suspend();
-      return false;
-    }
-    this.board.restore(save.board);
-    this.random.restore(save.random);
-    this.session.restore(save.session);
+    if (!this.progress.restore(this.board, this.random, this.session)) return false;
+    const save = this.progress.savedRun!;
     this.hud.initLevel(save.session.config, save.session.accumulatedMoves, save.session.globalScore);
     this.hud.addScore(save.session.score, save.session.globalScore, this.session.isBonusPhase());
     this.hud.updateMoves(save.session.movesLeft, this.session.isTargetReached(), this.session.getLevelMovesLeft(), this.session.getAccumulatedMoves());
     this.hud.updateShuffles(save.session.shufflesLeft);
-    this.hud.updateObjectives?.(this.session.getObjectives());
+    this.hud.updateObjectives(this.session.getObjectives());
     this.boardView.initFromBoard();
     this.onResize();
     this.inputController.setLocked(!this.session.canMakeMove());
@@ -459,22 +398,9 @@ export class Game {
     this.saveStatusView.render(this.saves.status);
   }
 
-  private canPlay(): boolean { return this.resources.snapshot().lives > 0 && this.session.canMakeMove(); }
-
-  private beginAttempt(): void {
-    const bank = this.resources.beginAttempt(this.checkpoint, this.session.getLevel(), this.session.getAccumulatedMoves());
-    this.session.reconcileBank(bank);
-  }
+  private canPlay(): boolean { return this.lives.canPlay(); }
 
   private refreshLives(): void {
-    const snapshot = this.resources.snapshot();
-    this.livesView.render(snapshot, this.resources.status);
-    this.modal.updateLives?.(snapshot);
-    if (this.turnInFlight) return;
-    const playable = snapshot.lives > 0 && this.session.canMakeMove();
-    const wasLocked = this.inputController.isLocked();
-    if (wasLocked === playable) this.inputController.setLocked(!playable);
-    if (!playable) this.idleHintController.stop();
-    else if (wasLocked) this.idleHintController.start();
+    this.lives.refresh();
   }
 }

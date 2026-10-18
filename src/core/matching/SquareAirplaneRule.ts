@@ -1,6 +1,6 @@
 import { MatchGroup, SpecialType, TileData } from '../TileTypes.ts';
 import { IMatchRule, MatchEvaluationContext } from './IMatchRule.ts';
-import { chooseSpawnPos } from './MatchRuleRegistry.ts';
+import { chooseSpawnPos } from './SpawnPlacement.ts';
 
 export class SquareAirplaneRule implements IMatchRule {
   public readonly priority = 250;

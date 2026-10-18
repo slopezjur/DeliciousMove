@@ -3,13 +3,22 @@ import { CellState, ObjectiveEvent, isBlocker, isCandy } from './BoardFeatures.t
 import { CascadeStep, Position, SpecialType, TileData } from './TileTypes.ts';
 import { IRandomSource, MathRandomSource } from './random/IRandomSource.ts';
 
+export interface TerrainHitResult {
+  objectiveEvents: ObjectiveEvent[];
+  updatedTiles: TileData[];
+  cellsAfter?: CellState[];
+}
+
+export interface ITerrainResolver {
+  applyHits(board: Board, destroyed: Set<number>, matched?: readonly TileData[]): TerrainHitResult;
+  spread(board: Board, steps: readonly CascadeStep[]): CascadeStep | null;
+}
+
 /** Cell effects never run for rejected swaps. Damage is capped at one layer per cascade pass. */
-export class TerrainResolver {
+export class TerrainResolver implements ITerrainResolver {
   constructor(private readonly random: IRandomSource = new MathRandomSource()) {}
 
-  public applyHits(board: Board, destroyed: Set<number>, matched: readonly TileData[] = []): {
-    objectiveEvents: ObjectiveEvent[]; updatedTiles: TileData[]; cellsAfter?: CellState[];
-  } {
+  public applyHits(board: Board, destroyed: Set<number>, matched: readonly TileData[] = []): TerrainHitResult {
     const events: ObjectiveEvent[] = [], updatedTiles: TileData[] = [];
     const hadTerrain = board.hasTerrain();
     const hits = new Map<string, Position>();

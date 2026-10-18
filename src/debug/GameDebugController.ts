@@ -1,3 +1,4 @@
+import type { ILocalization } from '../i18n/ILanguageService.ts';
 import { LanguageService } from '../i18n/LanguageService.ts';
 import { IGameTelemetryReader, TelemetryMoveRecord, TelemetryStateSnapshot } from '../core/telemetry/IGameTelemetry.ts';
 import { DebugOverlayView, DebugOverlayCallbacks } from '../ui/DebugOverlayView.ts';
@@ -27,7 +28,7 @@ export class GameDebugController {
     actions: DebugOverlayCallbacks,
     clipboard: IClipboardService,
     overlay?: IDebugOverlayView,
-    language = new LanguageService()
+    language: ILocalization = new LanguageService()
   ) {
     this.overlay = overlay ?? (
       typeof document !== 'undefined' && document.getElementById('debug-overlay')

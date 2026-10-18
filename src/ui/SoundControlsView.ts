@@ -1,5 +1,5 @@
+import type { ILocalization } from '../i18n/ILanguageService.ts';
 import { ISoundService } from '../audio/ISoundService.ts';
-import { LanguageService } from '../i18n/LanguageService.ts';
 
 export type SoundPreferences = Pick<ISoundService, 'toggleMute' | 'isMuted'>;
 
@@ -7,7 +7,7 @@ export type SoundPreferences = Pick<ISoundService, 'toggleMute' | 'isMuted'>;
 export class SoundControlsView {
   private readonly button: HTMLElement | null;
 
-  constructor(private readonly sound: SoundPreferences, private readonly language: LanguageService) {
+  constructor(private readonly sound: SoundPreferences, private readonly language: ILocalization) {
     this.button = typeof document === 'undefined' ? null : document.getElementById('sound-toggle-btn');
     this.button?.addEventListener('click', () => {
       this.sound.toggleMute();

@@ -1,6 +1,7 @@
 import { SpecialType } from '../../core/TileTypes.ts';
 import { ComboEffectType, SpecialTriggerEffect } from '../../core/specials/ISpecialHandler.ts';
 import { EffectPresentationContext, IEffectPresenter, IEffectPresenterRegistry } from './IEffectPresenter.ts';
+import { AirplaneFlightPresenter } from './AirplaneFlightPresenter.ts';
 
 export class StripedBeamPresenter implements IEffectPresenter {
   public canPresent(effectType: ComboEffectType): boolean {
@@ -65,6 +66,10 @@ export class CrossBeamPresenter implements IEffectPresenter {
 }
 
 export class ColorBombPresenter implements IEffectPresenter {
+  public clearDelay(_effect: SpecialTriggerEffect, index: number): number {
+    return Math.min(index * 0.018, 0.3);
+  }
+
   public canPresent(effectType: ComboEffectType): boolean {
     return (
       effectType === SpecialType.ColorBomb ||
@@ -79,7 +84,7 @@ export class ColorBombPresenter implements IEffectPresenter {
       const sprite = ctx.boardView.getTileSprite(id);
       return sprite ? [{ x: sprite.x, y: sprite.y }] : [];
     });
-    await ctx.boardView.vfx.createColorBombCharge?.(ctx.position.x, ctx.position.y, targets);
+    await ctx.boardView.vfx.createColorBombCharge(ctx.position.x, ctx.position.y, targets);
     const intensity = effect.effectType === 'combo_double_color_bomb' ? 18 : 12;
     ctx.boardView.screenShake(intensity);
     ctx.boardView.vfx.createShockwave(
@@ -91,28 +96,35 @@ export class ColorBombPresenter implements IEffectPresenter {
   }
 }
 
-import { AirplaneFlightPresenter } from './AirplaneFlightPresenter.ts';
-
 export class EffectPresenterRegistry implements IEffectPresenterRegistry {
-  private presenters: IEffectPresenter[] = [];
+  private readonly presenters: { presenter: IEffectPresenter; priority: number }[] = [];
 
   constructor(presenters?: IEffectPresenter[]) {
-    this.presenters = presenters ?? [
+    for (const presenter of presenters ?? [
       new StripedBeamPresenter(),
       new WrappedShockwavePresenter(),
       new CrossBeamPresenter(),
       new ColorBombPresenter(),
       new AirplaneFlightPresenter(),
-    ];
+    ]) this.register(presenter);
   }
 
-  public register(presenter: IEffectPresenter): void {
-    this.presenters.push(presenter);
+  public register(presenter: IEffectPresenter, priority = 0): void {
+    this.presenters.push({ presenter, priority });
+    this.presenters.sort((a, b) => a.priority - b.priority);
+  }
+
+  private find(effect: SpecialTriggerEffect): IEffectPresenter | undefined {
+    return this.presenters.find(({ presenter }) => presenter.canPresent(effect.effectType))?.presenter;
+  }
+
+  public getClearDelay(effects: readonly SpecialTriggerEffect[], index: number): number {
+    return effects.reduce((delay, effect) => Math.max(delay, this.find(effect)?.clearDelay?.(effect, index) ?? 0), 0);
   }
 
   /** Plays the first presenter that claims the effect; unknown effects are silently skipped. */
   public async present(effect: SpecialTriggerEffect, context: EffectPresentationContext): Promise<void> {
-    const presenter = this.presenters.find((p) => p.canPresent(effect.effectType));
+    const presenter = this.find(effect);
     if (presenter) {
       await presenter.present(effect, context);
     }

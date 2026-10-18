@@ -17,9 +17,16 @@ export interface EffectPresentationContext {
 export interface IEffectPresenter {
   canPresent(effectType: ComboEffectType): boolean;
   present(effect: SpecialTriggerEffect, context: EffectPresentationContext): Promise<void> | void;
+  /** Optional effect-specific delay before each affected candy clears. */
+  clearDelay?(effect: SpecialTriggerEffect, index: number): number;
 }
 
-export interface IEffectPresenterRegistry {
-  register(presenter: IEffectPresenter): void;
+export interface IEffectPlayback {
   present(effect: SpecialTriggerEffect, context: EffectPresentationContext): Promise<void>;
+  getClearDelay(effects: readonly SpecialTriggerEffect[], index: number): number;
+}
+
+export interface IEffectPresenterRegistry extends IEffectPlayback {
+  /** Lower priorities run first; equal priorities retain registration order. */
+  register(presenter: IEffectPresenter, priority?: number): void;
 }

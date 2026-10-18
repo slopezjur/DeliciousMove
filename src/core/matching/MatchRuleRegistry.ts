@@ -1,19 +1,7 @@
 import { MatchGroup, Position, SpecialType, TileData } from '../TileTypes.ts';
 import { IMatchRule, MatchEvaluationContext, IMatchRuleRegistry } from './IMatchRule.ts';
 import { SquareAirplaneRule } from './SquareAirplaneRule.ts';
-
-export function chooseSpawnPos(
-  tiles: TileData[],
-  interactionPositions: Position[],
-  fallback: Position
-): Position {
-  for (const pos of interactionPositions) {
-    if (tiles.some((t) => t.row === pos.row && t.col === pos.col)) {
-      return { row: pos.row, col: pos.col };
-    }
-  }
-  return fallback;
-}
+import { chooseSpawnPos } from './SpawnPlacement.ts';
 
 export class ColorBombRule implements IMatchRule {
   public readonly priority = 100;

@@ -1,13 +1,13 @@
-import { LanguageService } from '../i18n/LanguageService.ts';
-import { LivesSnapshot, PlayerResources } from '../persistence/PlayerResources.ts';
+import type { ITranslator } from '../i18n/ILanguageService.ts';
+import { LivesSnapshot, ResourceStatus } from '../persistence/PlayerResources.ts';
 
 export function lifeCountdown(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 export class LivesView {
-  constructor(private readonly language: LanguageService) {}
-  render(snapshot: LivesSnapshot, status: PlayerResources['status']): void {
+  constructor(private readonly language: ITranslator) {}
+  render(snapshot: LivesSnapshot, status: ResourceStatus): void {
     if (typeof document === 'undefined') return;
     const value = document.getElementById('lives-value'), timer = document.getElementById('lives-timer');
     if (value) value.textContent = `♥ ${snapshot.lives}/${snapshot.maximum}`;

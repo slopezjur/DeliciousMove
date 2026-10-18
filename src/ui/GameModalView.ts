@@ -1,3 +1,4 @@
+import type { ILocalization } from '../i18n/ILanguageService.ts';
 import { IGameModalView } from './IGameModalView.ts';
 import { GameOverReason } from '../core/GameSession.ts';
 import { ISoundService } from '../audio/ISoundService.ts';
@@ -24,7 +25,7 @@ export class GameModalView implements IGameModalView {
    * @param onAction Invoked when the player confirms the modal. The caller decides what
    *                 that means for the current state (advance a level or restart the run).
    */
-  constructor(onAction: () => void, soundService: ISoundService = new SoundManager(), private readonly language = new LanguageService()) {
+  constructor(onAction: () => void, soundService: ISoundService = new SoundManager(), private readonly language: ILocalization = new LanguageService()) {
     this.soundService = soundService;
     language.subscribe(() => this.redraw?.());
     this.modalEl = this.findElement('game-modal');

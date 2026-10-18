@@ -35,7 +35,7 @@ export class AirplaneFlightPresenter implements IEffectPresenter {
 
     // 2. Takeoff shockwave and fly sound
     ctx.boardView.vfx.createShockwave(ctx.position.x, ctx.position.y, ctx.boardView.tileSize * 1.5);
-    ctx.sound.playAirplaneFly?.();
+    ctx.sound.playAirplaneFly();
 
     // 2. Fly airplanes to target(s) via IVFXManager (SRP & LSP)
     const targets = [];

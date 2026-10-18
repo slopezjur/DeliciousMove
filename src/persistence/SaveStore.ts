@@ -6,7 +6,15 @@ export const SAVE_KEY = 'deliciousmove.save';
 export const BACKUP_KEY = 'deliciousmove.save.backup';
 export type SaveStatus = 'none' | 'saved' | 'unavailable' | 'invalid' | 'newer' | 'incompatible' | 'recovered';
 
-export class SaveStore {
+export interface ISaveStore {
+  readonly status: SaveStatus;
+  load(): GameSave | null;
+  save(save: GameSave): boolean;
+  beginNewRun(): void;
+  suspend(): void;
+}
+
+export class SaveStore implements ISaveStore {
   public status: SaveStatus = 'none';
   private blocked = false;
 

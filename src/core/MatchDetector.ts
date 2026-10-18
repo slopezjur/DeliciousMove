@@ -1,7 +1,7 @@
 import { Board } from './Board.ts';
 import { TileData, TileColor, Position, MatchGroup } from './TileTypes.ts';
 import { MatchRuleRegistry } from './matching/MatchRuleRegistry.ts';
-import { IMatchRuleRegistry } from './matching/IMatchRule.ts';
+import { IMatchRuleReader } from './matching/IMatchRule.ts';
 
 export interface RawRun {
   orientation: 'horizontal' | 'vertical';
@@ -15,9 +15,9 @@ export interface IMatchDetector {
 }
 
 export class MatchDetector implements IMatchDetector {
-  private readonly registry: IMatchRuleRegistry;
+  private readonly registry: IMatchRuleReader;
 
-  constructor(registry: IMatchRuleRegistry = new MatchRuleRegistry()) {
+  constructor(registry: IMatchRuleReader = new MatchRuleRegistry()) {
     this.registry = registry;
   }
 

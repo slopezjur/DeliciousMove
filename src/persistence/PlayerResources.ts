@@ -18,11 +18,25 @@ interface ResourceData {
   attempt?: AttemptResources;
 }
 export interface LivesSnapshot { lives: number; maximum: number; secondsToNext: number }
+export type ResourceStatus = 'available' | 'unavailable' | 'preserved';
+
+export interface ILivesReader {
+  readonly status: ResourceStatus;
+  snapshot(): LivesSnapshot;
+}
+
+export interface IPlayerResources extends ILivesReader {
+  getAttempt(checkpoint: string): AttemptResources | undefined;
+  beginAttempt(checkpoint: string, level: number, bank: number): number;
+  spendBank(checkpoint: string, level: number, bank: number): void;
+  fail(checkpoint: string, level: number, bank: number, reason: GameOverReason): boolean;
+  clearAttempt(): void;
+}
 
 /** Persistent consumables, never a mid-level board save. Failure debits are idempotent. */
-export class PlayerResources {
+export class PlayerResources implements IPlayerResources {
   private data: ResourceData;
-  public status: 'available' | 'unavailable' | 'preserved' = 'available';
+  public status: ResourceStatus = 'available';
   constructor(private readonly storage: IStorage, private readonly now: () => number = Date.now) {
     this.data = { version: 1, lives: MAX_LIVES, nextLifeAt: null, observedAt: now() };
     this.refresh();

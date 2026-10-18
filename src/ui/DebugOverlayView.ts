@@ -1,3 +1,4 @@
+import type { ILocalization } from '../i18n/ILanguageService.ts';
 import { LanguageService } from '../i18n/LanguageService.ts';
 import { IGameTelemetryReader } from '../core/telemetry/IGameTelemetry.ts';
 import { IDebugOverlayView } from './IDebugOverlayView.ts';
@@ -24,7 +25,7 @@ export class DebugOverlayView implements IDebugOverlayView {
     telemetry: IGameTelemetryReader,
     callbacks: DebugOverlayCallbacks,
     clipboardService: IClipboardService = new BrowserClipboardService(),
-    private readonly language = new LanguageService()
+    private readonly language: ILocalization = new LanguageService()
   ) {
     this.telemetry = telemetry;
     this.callbacks = callbacks;

@@ -1,8 +1,8 @@
-import { LanguageService } from '../i18n/LanguageService.ts';
+import type { ILocalization } from '../i18n/ILanguageService.ts';
 import { IRecordsReader } from '../persistence/RecordsStore.ts';
 
 export class RecordsView {
-  constructor(private readonly records: IRecordsReader, private readonly language: LanguageService) {
+  constructor(private readonly records: IRecordsReader, private readonly language: ILocalization) {
     language.subscribe(() => this.render());
   }
 

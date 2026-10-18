@@ -88,6 +88,7 @@ describe('combined goals and bonus state', () => {
     session.addPoints(99999); hud.addScore(99999); hud.updateObjectives(session.getObjectives());
     expect(banner.classList.contains('hidden')).toBe(true);
     session.recordObjectiveEvents(events); hud.updateObjectives(session.getObjectives());
+    hud.setBonusPhase(session.isBonusPhase());
     expect(banner.classList.contains('hidden')).toBe(false);
     language.toggle(); expect(banner.classList.contains('hidden')).toBe(false);
     expect(language.t('bonusExplanation')).toContain('Sigue combinando');

@@ -49,8 +49,9 @@ function environment() {
     init: vi.fn().mockResolvedValue(undefined), stage: { addChild: vi.fn() },
     canvas: {}, renderer: { resize: vi.fn() },
   } as unknown as Application;
-  const hud = { initLevel: vi.fn(), addScore: vi.fn(), updateMoves: vi.fn(), updateShuffles: vi.fn(), setLastChance: vi.fn() };
-  const modal = { showVictory: vi.fn(), showGameOver: vi.fn(), hide: vi.fn() };
+  const hud = { initLevel: vi.fn(), addScore: vi.fn(), updateMoves: vi.fn(), updateShuffles: vi.fn(),
+    setLastChance: vi.fn(), setBonusPhase: vi.fn(), updateObjectives: vi.fn() };
+  const modal = { showVictory: vi.fn(), showGameOver: vi.fn(), hide: vi.fn(), updateLives: vi.fn(), showNoLives: vi.fn() };
   const idleHintController = { start: vi.fn(), stop: vi.fn(), resetTimer: vi.fn() };
   const container = { appendChild: vi.fn() } as unknown as HTMLElement;
   return { data, storage, app, hud, modal, idleHintController, container };
@@ -103,6 +104,7 @@ describe('game checkpoint lifecycle', () => {
       const playing = captured.swap!({ row: 0, col: 0 }, { row: 0, col: 1 });
       await started;
       expect(env.hud.setLastChance).toHaveBeenLastCalledWith(true);
+      expect(env.hud.setBonusPhase).toHaveBeenLastCalledWith(false);
       expect(resources.snapshot().lives).toBe(5);
       expect(env.modal.showGameOver).not.toHaveBeenCalled();
       expect(env.storage.getItem(SAVE_KEY)).toBeNull();
@@ -113,6 +115,7 @@ describe('game checkpoint lifecycle', () => {
       expect(resources.snapshot().lives).toBe(rescued ? 5 : 4);
       expect(session.getState()).toBe(rescued ? GameState.Ready : GameState.GameOver);
       expect(env.hud.setLastChance).toHaveBeenLastCalledWith(false);
+      expect(env.hud.setBonusPhase).toHaveBeenLastCalledWith(rescued);
       expect(env.storage.getItem(SAVE_KEY)).toBeNull();
       if (!rescued) {
         (game as unknown as { onModalAction(): void }).onModalAction();

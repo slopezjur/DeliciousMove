@@ -1,11 +1,11 @@
-import { LanguageService } from '../i18n/LanguageService.ts';
+import type { ILocalization } from '../i18n/ILanguageService.ts';
 import { SaveStatus } from '../persistence/SaveStore.ts';
 
 /** Presents checkpoint status without reading or mutating persistence. */
 export class SaveStatusView {
   private status: SaveStatus = 'none';
 
-  constructor(private readonly language: LanguageService) {
+  constructor(private readonly language: ILocalization) {
     language.subscribe(() => this.render(this.status));
   }
 
